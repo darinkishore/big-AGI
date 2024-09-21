@@ -2,12 +2,12 @@
  * porting of implementation from here: https://til.simonwillison.net/llms/python-react-pattern
  */
 
-import type { DLLMId } from '~/modules/llms/store-llms';
 import { bareBonesPromptMixer } from '~/modules/persona/pmix/pmix';
 import { callApiSearchGoogle } from '~/modules/google/search.client';
 import { callBrowseFetchPage } from '~/modules/browse/browse.client';
 import { llmChatGenerateOrThrow, VChatMessageIn } from '~/modules/llms/llm.client';
 
+import type { DLLMId } from '~/common/stores/llms/llms.types';
 import { frontendSideFetch } from '~/common/util/clientFetchers';
 
 
@@ -38,7 +38,7 @@ Opens the given URL and displays it
 
 ` : '') + `calculate:
 e.g. calculate: 4 * 7 / 3
-Runs a calculation and returns the number - uses Python so be sure to use floating point syntax if necessary
+Runs a simple javascript calculation and returns the number, the input must be javascript 
 
 wikipedia:
 e.g. wikipedia: Django

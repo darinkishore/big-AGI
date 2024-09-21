@@ -16,26 +16,26 @@ import TelegramIcon from '@mui/icons-material/Telegram';
 
 import { useChatAutoSuggestAttachmentPrompts, useChatMicTimeoutMsValue } from '../../store-app-chat';
 
-import type { DLLM } from '~/modules/llms/store-llms';
-import type { LLMOptionsOpenAI } from '~/modules/llms/vendors/openai/openai.vendor';
-import { useAgiAttachmentPrompts } from '~/modules/aifn/attachmentprompts/useAgiAttachmentPrompts';
+import type { DOpenAILLMOptions } from '~/modules/llms/vendors/openai/openai.vendor';
+import { useAgiAttachmentPrompts } from '~/modules/aifn/agiattachmentprompts/useAgiAttachmentPrompts';
 import { useBrowseCapability } from '~/modules/browse/store-module-browsing';
 
+import type { DLLM } from '~/common/stores/llms/llms.types';
 import { AudioGenerator } from '~/common/util/audio/AudioGenerator';
 import { AudioPlayer } from '~/common/util/audio/AudioPlayer';
-import { ButtonAttachFilesMemo } from '~/common/components/ButtonAttachFiles';
+import { ButtonAttachFilesMemo, openFileForAttaching } from '~/common/components/ButtonAttachFiles';
 import { ChatBeamIcon } from '~/common/components/icons/ChatBeamIcon';
 import { ConversationsManager } from '~/common/chat-overlay/ConversationsManager';
 import { DMessageMetadata, DMetaReferenceItem, messageFragmentsReduceText } from '~/common/stores/chat/chat.message';
 import { ShortcutKey, ShortcutObject, useGlobalShortcuts } from '~/common/components/shortcuts/useGlobalShortcuts';
+import { addSnackbar } from '~/common/components/snackbar/useSnackbarsStore';
 import { animationEnterBelow } from '~/common/util/animUtils';
-import { browserSpeechRecognitionCapability, SpeechResult, useSpeechRecognition } from '~/common/components/useSpeechRecognition';
+import { browserSpeechRecognitionCapability, PLACEHOLDER_INTERIM_TRANSCRIPT, SpeechResult, useSpeechRecognition, } from '~/common/components/useSpeechRecognition';
 import { conversationTitle, DConversationId } from '~/common/stores/chat/chat.conversation';
 import { copyToClipboard, supportsClipboardRead } from '~/common/util/clipboardUtils';
 import { createTextContentFragment, DMessageAttachmentFragment, DMessageContentFragment, duplicateDMessageFragments } from '~/common/stores/chat/chat.fragments';
 import { estimateTextTokens, glueForMessageTokens, marshallWrapDocFragments } from '~/common/stores/chat/chat.tokens';
 import { getConversation, isValidConversation, useChatStore } from '~/common/stores/chat/store-chats';
-import { isMacUser } from '~/common/util/pwaUtils';
 import { launchAppCall } from '~/common/app.routes';
 import { lineHeightTextareaMd } from '~/common/app.theme';
 import { optimaOpenPreferences } from '~/common/layout/optima/useOptima';
@@ -69,12 +69,12 @@ import { ButtonMicContinuationMemo } from './buttons/ButtonMicContinuation';
 import { ButtonMicMemo } from './buttons/ButtonMic';
 import { ButtonMultiChatMemo } from './buttons/ButtonMultiChat';
 import { ButtonOptionsDraw } from './buttons/ButtonOptionsDraw';
-import { ComposerTextAreaActions } from './ComposerTextAreaActions';
+import { ComposerTextAreaActions } from './textarea/ComposerTextAreaActions';
 import { StatusBar } from '../StatusBar';
 import { TokenBadgeMemo } from './tokens/TokenBadge';
 import { TokenProgressbarMemo } from './tokens/TokenProgressbar';
+import { useComposerDragDrop } from './useComposerDragDrop';
 import { useComposerStartupText } from './store-composer';
-import { useDragDrop } from './useComposerDragDrop';
 
 
 const zIndexComposerOverlayMic = 10;
@@ -89,7 +89,7 @@ const paddingBoxSx: SxProps = {
  * A React component for composing messages, with attachments and different modes.
  */
 export function Composer(props: {
-  isMobile?: boolean;
+  isMobile: boolean;
   chatLLM: DLLM | null;
   composerTextAreaRef: React.RefObject<HTMLTextAreaElement>;
   targetConversationId: DConversationId | null;
@@ -110,7 +110,8 @@ export function Composer(props: {
     chatExecuteMode,
     chatExecuteModeSendColor, chatExecuteModeSendLabel,
     chatExecuteMenuComponent, chatExecuteMenuShown, showChatExecuteMenu,
-  } = useChatExecuteMode(props.capabilityHasT2I, !!props.isMobile);
+  } = useChatExecuteMode(props.capabilityHasT2I, props.isMobile);
+  const micCardRef = React.useRef<HTMLDivElement>(null);
 
   // external state
   const { labsAttachScreenCapture, labsCameraDesktop, labsShowCost, labsShowShortcutBar } = useUXLabsStore(useShallow(state => ({
@@ -138,11 +139,11 @@ export function Composer(props: {
 
   // external overlay state (extra conversationId-dependent state)
   const conversationOverlayStore = props.targetConversationId
-    ? ConversationsManager.getHandler(props.targetConversationId)?.getOverlayStore() || null
+    ? ConversationsManager.getHandler(props.targetConversationId)?.conversationOverlayStore ?? null
     : null;
 
   // composer-overlay: for the in-reference-to state, comes from the conversation overlay
-  const allowInReferenceTo = chatExecuteMode === 'generate-content' || chatExecuteMode === 'generate-text-v1';
+  const allowInReferenceTo = chatExecuteMode === 'generate-content';
   const inReferenceTo = useChatComposerOverlayStore(conversationOverlayStore, store => allowInReferenceTo ? store.inReferenceTo : null);
 
   // don't load URLs if the user is typing a command or there's no capability
@@ -159,18 +160,16 @@ export function Composer(props: {
   const llmAttachmentDraftsCollection = useLLMAttachmentDrafts(attachmentDrafts, props.chatLLM);
 
   // drag/drop
-  const { dragContainerSx, dragDropComponent, handleDragEnter, handleDragStart } = useDragDrop(!!props.isMobile, attachAppendDataTransfer);
+  const { dragContainerSx, dropComponent, handleContainerDragEnter, handleContainerDragStart } = useComposerDragDrop(!props.isMobile, attachAppendDataTransfer);
 
   // ai functions
-  const {
-    agiAttachmentPrompts, agiAttachmentPromptsComponent, agiAttachmentPromptsRefetch,
-  } = useAgiAttachmentPrompts(useChatAutoSuggestAttachmentPrompts(), attachmentDrafts);
+  const agiAttachmentPrompts = useAgiAttachmentPrompts(useChatAutoSuggestAttachmentPrompts(), attachmentDrafts);
 
 
   // derived state
 
   const { composerTextAreaRef, targetConversationId, onAction, onTextImagine } = props;
-  const isMobile = !!props.isMobile;
+  const isMobile = props.isMobile;
   const isDesktop = !props.isMobile;
   const noConversation = !targetConversationId;
   const noLLM = !props.chatLLM;
@@ -188,10 +187,9 @@ export function Composer(props: {
   if (props.chatLLM && tokensComposer > 0)
     tokensComposer += glueForMessageTokens(props.chatLLM);
   const tokensHistory = _historyTokenCount;
-  const tokensReponseMax = (props.chatLLM?.options as LLMOptionsOpenAI /* FIXME: BIG ASSUMPTION */)?.llmResponseTokens || 0;
+  const tokensReponseMax = (props.chatLLM?.options as DOpenAILLMOptions /* FIXME: BIG ASSUMPTION */)?.llmResponseTokens || 0;
   const tokenLimit = props.chatLLM?.contextTokens || 0;
-  const tokenPriceIn = props.chatLLM?.pricing?.chatIn;
-  const tokenPriceOut = props.chatLLM?.pricing?.chatOut;
+  const tokenChatPricing = props.chatLLM?.pricing?.chat;
 
 
   // Effect: load initial text if queued up (e.g. by /link/share_targe)
@@ -359,14 +357,14 @@ export function Composer(props: {
     if (e.key === 'Enter') {
 
       // Alt (Windows) or Option (Mac) + Enter: append the message instead of sending it
-      if (e.altKey) {
+      if (e.altKey && !e.metaKey && !e.ctrlKey) {
         if (await handleSendAction('append-user', composeText)) // 'alt+enter' -> write
           touchAltEnter();
         return e.preventDefault();
       }
 
       // Ctrl (Windows) or Command (Mac) + Enter: send for beaming
-      if ((isMacUser && e.metaKey && !e.ctrlKey) || (!isMacUser && e.ctrlKey && !e.metaKey)) {
+      if (e.ctrlKey && !e.metaKey && !e.altKey) {
         if (await handleSendAction('beam-content', composeText)) // 'ctrl+enter' -> beam
           touchCtrlEnter();
         return e.preventDefault();
@@ -418,7 +416,9 @@ export function Composer(props: {
       void handleSendAction(chatExecuteMode, nextText); // fire/forget
     } else {
       if (!micContinuation && notUserStop)
-        void AudioPlayer.playUrl('/sounds/mic-off-mid.mp3');
+        void AudioPlayer.playUrl('/sounds/mic-off-mid.mp3').catch(() => {
+          // This happens on Is.Browser.Safari, where the audio is not allowed to play without user interaction
+        });
       if (nextText) {
         composerTextAreaRef.current?.focus();
         setComposeText(nextText);
@@ -429,29 +429,6 @@ export function Composer(props: {
   const { recognitionState, toggleRecognition } = useSpeechRecognition(onSpeechResultCallback, chatMicTimeoutMs || 2000);
 
   // useMediaSessionCallbacks({ play: toggleRecognition, pause: toggleRecognition });
-
-  useGlobalShortcuts('Composer', React.useMemo(() => {
-    const composerShortcuts: ShortcutObject[] = [];
-    if (supportsClipboardRead)
-      composerShortcuts.push({ key: 'v', ctrl: true, shift: true, action: attachAppendClipboardItems, description: 'Attach Clipboard' });
-    if (recognitionState.isActive) {
-      composerShortcuts.push({ key: 'm', ctrl: true, action: () => toggleRecognition(true), description: 'Mic · Send', disabled: !recognitionState.hasSpeech, endDecoratorIcon: TelegramIcon as any, level: 1 });
-      composerShortcuts.push({
-        key: ShortcutKey.Esc, action: () => {
-          setMicContinuation(false);
-          toggleRecognition(false);
-        }, description: 'Mic · Stop', level: 1,
-      });
-    } else if (browserSpeechRecognitionCapability().mayWork)
-      composerShortcuts.push({
-        key: 'm', ctrl: true, action: () => {
-          // steal focus from the textarea, in case it has - so that enter cannot work against us
-          (document.activeElement as HTMLElement)?.blur?.();
-          toggleRecognition(false);
-        }, description: 'Microphone',
-      });
-    return composerShortcuts;
-  }, [attachAppendClipboardItems, recognitionState.hasSpeech, recognitionState.isActive, toggleRecognition]));
 
   const micIsRunning = !!speechInterimResult;
   const micContinuationTrigger = micContinuation && !micIsRunning && !assistantAbortible && !recognitionState.errorMessage;
@@ -474,6 +451,15 @@ export function Composer(props: {
       toggleRecognition();
   }, [toggleRecognition, micContinuationTrigger]);
 
+  React.useEffect(() => {
+    // auto-scroll the mic card to the bottom
+    micCardRef.current?.scrollTo({
+      top: micCardRef.current.scrollHeight,
+      behavior: 'smooth'
+    });
+  }, [speechInterimResult]);
+
+
 
   // Attachment Up
 
@@ -492,9 +478,12 @@ export function Composer(props: {
     void attachAppendFile('screencapture', file);
   }, [attachAppendFile]);
 
-  const handleAttachFiles = React.useCallback(async (files: FileWithHandle[]) => {
+  const handleAttachFiles = React.useCallback(async (files: FileWithHandle[], errorMessage: string | null) => {
+    if (errorMessage)
+      addSnackbar({ key: 'attach-files-open-fail', message: `Could not open files (${errorMessage})`, type: 'issue' });
     for (let file of files)
-      await attachAppendFile('file-open', file).catch(console.error);
+      await attachAppendFile('file-open', file)
+        .catch((error: any) => addSnackbar({ key: 'attach-file-open-fail', message: `Could not attach the file (${error?.message || error?.toString() || 'unknown error'})`, type: 'issue' }));
   }, [attachAppendFile]);
 
 
@@ -515,9 +504,42 @@ export function Composer(props: {
   }, [attachmentsTakeFragmentsByType, setComposeText]);
 
 
+  // Keyboard Shortcuts
+
+  useGlobalShortcuts('ChatComposer.Gen', React.useMemo(() => [
+    ...(assistantAbortible ? [{ key: ShortcutKey.Esc, action: handleStopClicked, description: 'Stop', level: 2 }] : []),
+  ], [assistantAbortible, handleStopClicked]));
+
+  useGlobalShortcuts('ChatComposer', React.useMemo(() => {
+    const composerShortcuts: ShortcutObject[] = [];
+    if (showLLMAttachments) {
+      composerShortcuts.push({ key: 'f', ctrl: true, shift: true, action: () => openFileForAttaching(true, handleAttachFiles), description: 'Attach File' });
+      if (supportsClipboardRead)
+        composerShortcuts.push({ key: 'v', ctrl: true, shift: true, action: attachAppendClipboardItems, description: 'Attach Clipboard' });
+    }
+    if (recognitionState.isActive) {
+      composerShortcuts.push({ key: 'm', ctrl: true, action: () => toggleRecognition(true), description: 'Mic · Send', disabled: !recognitionState.hasSpeech, endDecoratorIcon: TelegramIcon as any, level: 3 });
+      composerShortcuts.push({
+        key: ShortcutKey.Esc, action: () => {
+          setMicContinuation(false);
+          toggleRecognition(false);
+        }, description: 'Mic · Stop', level: 3,
+      });
+    } else if (browserSpeechRecognitionCapability().mayWork)
+      composerShortcuts.push({
+        key: 'm', ctrl: true, action: () => {
+          // steal focus from the textarea, in case it has - so that enter cannot work against us
+          (document.activeElement as HTMLElement)?.blur?.();
+          toggleRecognition(false);
+        }, description: 'Microphone',
+      });
+    return composerShortcuts;
+  }, [attachAppendClipboardItems, handleAttachFiles, recognitionState.hasSpeech, recognitionState.isActive, showLLMAttachments, toggleRecognition]));
+
+
   // ...
 
-  const isText = chatExecuteMode === 'generate-content' || chatExecuteMode === 'generate-text-v1';
+  const isText = chatExecuteMode === 'generate-content';
   const isTextBeam = chatExecuteMode === 'beam-content';
   const isAppend = chatExecuteMode === 'append-user';
   const isReAct = chatExecuteMode === 'react-content';
@@ -574,8 +596,8 @@ export function Composer(props: {
 
         <Grid
           container
-          onDragEnter={handleDragEnter}
-          onDragStart={handleDragStart}
+          onDragEnter={handleContainerDragEnter}
+          onDragStart={handleContainerDragStart}
           spacing={{ xs: 1, md: 2 }}
           sx={stableGridSx}
         >
@@ -588,7 +610,10 @@ export function Composer(props: {
               <Box sx={{ flexGrow: 0, display: 'grid', gap: 1 }}>
 
                 {/* [mobile] Mic button */}
-                {recognitionState.isAvailable && <ButtonMicMemo variant={micVariant} color={micColor} onClick={handleToggleMic} />}
+                {recognitionState.isAvailable && <ButtonMicMemo variant={micVariant} color={micColor} errorMessage={recognitionState.errorMessage} onClick={handleToggleMic} />}
+
+                {/* Responsive Camera OCR button */}
+                {showLLMAttachments && <ButtonAttachCameraMemo isMobile onOpenCamera={openCamera} />}
 
                 {/* [mobile] [+] button */}
                 {showLLMAttachments && (
@@ -597,10 +622,6 @@ export function Composer(props: {
                       <AddCircleOutlineIcon />
                     </MenuButton>
                     <Menu>
-                      {/* Responsive Camera OCR button */}
-                      <MenuItem>
-                        <ButtonAttachCameraMemo onOpenCamera={openCamera} />
-                      </MenuItem>
 
                       {/* Responsive Open Files button */}
                       <MenuItem>
@@ -611,6 +632,7 @@ export function Composer(props: {
                       {supportsClipboardRead && <MenuItem>
                         <ButtonAttachClipboardMemo onClick={attachAppendClipboardItems} />
                       </MenuItem>}
+
                     </Menu>
                   </Dropdown>
                 )}
@@ -664,7 +686,7 @@ export function Composer(props: {
                     variant='outlined'
                     color={isDraw ? 'warning' : isReAct ? 'success' : undefined}
                     autoFocus
-                    minRows={isMobile ? 4 : showChatInReferenceTo ? 4 : 5}
+                    minRows={isMobile ? 4 : agiAttachmentPrompts.hasData ? 3 : showChatInReferenceTo ? 4 : 5}
                     maxRows={isMobile ? 8 : 10}
                     placeholder={textPlaceholder}
                     value={composeText}
@@ -675,7 +697,6 @@ export function Composer(props: {
                     // onBlurCapture={handleFocusModeOff}
                     endDecorator={
                       <ComposerTextAreaActions
-                        agiAttachmentButton={agiAttachmentPromptsComponent}
                         agiAttachmentPrompts={agiAttachmentPrompts}
                         inReferenceTo={inReferenceTo}
                         onAppendAndSend={handleAppendTextAndSend}
@@ -694,16 +715,16 @@ export function Composer(props: {
                     }}
                     sx={{
                       backgroundColor: 'background.level1',
-                      '&:focus-within': { backgroundColor: 'background.popup', '.in-reference-to-bubble': { backgroundColor: 'background.popup' } },
+                      '&:focus-within': { backgroundColor: 'background.popup', '.within-composer-focus': { backgroundColor: 'background.popup' } },
                       lineHeight: lineHeightTextareaMd,
                     }} />
 
                   {!showChatInReferenceTo && tokenLimit > 0 && (tokensComposer > 0 || (tokensHistory + tokensReponseMax) > 0) && (
-                    <TokenProgressbarMemo direct={tokensComposer} history={tokensHistory} responseMax={tokensReponseMax} limit={tokenLimit} tokenPriceIn={tokenPriceIn} tokenPriceOut={tokenPriceOut} />
+                    <TokenProgressbarMemo chatPricing={tokenChatPricing} direct={tokensComposer} history={tokensHistory} responseMax={tokensReponseMax} limit={tokenLimit} />
                   )}
 
                   {!showChatInReferenceTo && tokenLimit > 0 && (
-                    <TokenBadgeMemo direct={tokensComposer} history={tokensHistory} responseMax={tokensReponseMax} limit={tokenLimit} tokenPriceIn={tokenPriceIn} tokenPriceOut={tokenPriceOut} showCost={labsShowCost} enableHover={!isMobile} showExcess absoluteBottomRight />
+                    <TokenBadgeMemo chatPricing={tokenChatPricing} direct={tokensComposer} history={tokensHistory} responseMax={tokensReponseMax} limit={tokenLimit} showCost={labsShowCost} enableHover={!isMobile} showExcess absoluteBottomRight />
                   )}
 
                 </Box>
@@ -717,7 +738,7 @@ export function Composer(props: {
                     mr: isDesktop ? 1 : 0.25,
                     display: 'flex', flexDirection: 'column', gap: isDesktop ? 1 : 0.25,
                   }}>
-                    {isDesktop && <ButtonMicMemo variant={micVariant} color={micColor} onClick={handleToggleMic} noBackground={!recognitionState.isActive} />}
+                    {isDesktop && <ButtonMicMemo variant={micVariant} color={micColor} errorMessage={recognitionState.errorMessage} onClick={handleToggleMic} noBackground={!recognitionState.isActive} />}
 
                     {micIsRunning && (
                       <ButtonMicContinuationMemo
@@ -731,6 +752,7 @@ export function Composer(props: {
                 {/* overlay: Mic */}
                 {micIsRunning && (
                   <Card
+                    ref={micCardRef}
                     color='primary' variant='soft'
                     sx={{
                       position: 'absolute', bottom: 0, left: 0, right: 0, top: 0,
@@ -738,25 +760,40 @@ export function Composer(props: {
                       border: '1px solid',
                       borderColor: 'primary.solidBg',
                       borderRadius: 'sm',
+                      boxShadow: 'inset 1px 1px 4px -3px var(--joy-palette-primary-solidHoverBg)',
                       zIndex: zIndexComposerOverlayMic,
                       pl: 1.5,
                       pr: { xs: 1.5, md: 5 },
                       py: 0.625,
                       overflow: 'auto',
+                      // '[data-joy-color-scheme="light"] &': {
+                      //   backgroundColor: 'primary.50',
+                      // },
                     }}>
                     <Typography sx={{
                       color: 'primary.softColor',
                       lineHeight: lineHeightTextareaMd,
-                      '& .interim': {
+                      '& > .preceding': {
+                        color: 'primary.softDisabledColor',
+                        // color: 'rgba(var(--joy-palette-primary-mainChannel) / 0.6)',
+                        overflowWrap: 'break-word',
+                        textWrap: 'wrap',
+                        whiteSpaceCollapse: 'preserve',
+                      },
+                      '& > .interim': {
                         textDecoration: 'underline',
                         textDecorationThickness: '0.25em',
                         textDecorationColor: 'rgba(var(--joy-palette-primary-mainChannel) / 0.1)',
                         textDecorationSkipInk: 'none',
                         textUnderlineOffset: '0.25em',
                       },
+                      '& > .placeholder': {
+                        fontStyle: 'italic',
+                      },
                     }}>
-                      {speechInterimResult.transcript}{' '}
-                      <span className={speechInterimResult.interimTranscript !== 'Listening...' ? 'interim' : undefined}>{speechInterimResult.interimTranscript}</span>
+                      {!!debouncedText && <span className='preceding'>{debouncedText.endsWith(' ') ? debouncedText : debouncedText + ' '}</span>}
+                      {speechInterimResult.transcript}
+                      <span className={speechInterimResult.interimTranscript === PLACEHOLDER_INTERIM_TRANSCRIPT ? 'placeholder' : 'interim'}>{speechInterimResult.interimTranscript}</span>
                     </Typography>
                   </Card>
                 )}
@@ -766,11 +803,11 @@ export function Composer(props: {
               {/* Render any Attachments & menu items */}
               {!!conversationOverlayStore && showLLMAttachments && (
                 <LLMAttachmentsList
+                  agiAttachmentPrompts={agiAttachmentPrompts}
                   attachmentDraftsStoreApi={conversationOverlayStore}
-                  llmAttachmentDrafts={llmAttachmentDraftsCollection.llmAttachmentDrafts}
                   canInlineSomeFragments={llmAttachmentDraftsCollection.canInlineSomeFragments}
+                  llmAttachmentDrafts={llmAttachmentDraftsCollection.llmAttachmentDrafts}
                   onAttachmentDraftsAction={handleAttachmentDraftsAction}
-                  onAgiAttachmentPromptsRefetch={agiAttachmentPromptsRefetch}
                 />
               )}
 
@@ -880,7 +917,7 @@ export function Composer(props: {
           </Grid>
 
           {/* overlay: Drag & Drop*/}
-          {dragDropComponent}
+          {dropComponent}
 
         </Grid>
 

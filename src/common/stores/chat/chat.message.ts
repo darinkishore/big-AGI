@@ -1,8 +1,11 @@
 import { agiUuid } from '~/common/util/idUtils';
-import { createPlaceholderMetaFragment, createTextContentFragment, DMessageContentFragment, DMessageFragment, duplicateDMessageFragments, isAttachmentFragment, isContentFragment, isContentOrAttachmentFragment, isTextPart, specialShallowReplaceTextContentFragment } from '~/common/stores/chat/chat.fragments';
 
-import type { DLLMId, DModelSourceId } from '~/modules/llms/store-llms';
+import { createPlaceholderMetaFragment, createTextContentFragment, DMessageContentFragment, DMessageFragment, duplicateDMessageFragments, isAttachmentFragment, isContentFragment, isContentOrAttachmentFragment, isTextPart, specialShallowReplaceTextContentFragment } from './chat.fragments';
+
 import type { ModelVendorId } from '~/modules/llms/vendors/vendors.registry';
+
+import type { DChatGenerateMetricsMd } from '~/common/stores/metrics/metrics.chatgenerate';
+import type { DLLMId } from '~/common/stores/llms/llms.types';
 
 
 // Message
@@ -18,9 +21,11 @@ export interface DMessage {
 
   // TODO: @deprecated - move to a Persona ID of the persona who wrote it, and still, could be teamwork...
   purposeId?: string;                 // only assistant/system
-  originLLM?: string;                 // only assistant - model that generated this message, goes beyond known models
 
-  metadata?: DMessageMetadata;        // metadata, mainly at creation and for UI
+  metadata?: DMessageMetadata;        // Semantic augmentation, mainly at creation
+
+  generator?: DMessageGenerator;      // Assistant generator info, and metrics
+
   userFlags?: DMessageUserFlag[];     // (UI) user-set per-message flags
 
   // TODO: @deprecated remove this, it's really view-dependent
@@ -34,39 +39,64 @@ export interface DMessage {
 }
 
 export type DMessageId = string;
+
 export type DMessageRole = 'user' | 'assistant' | 'system';
 
-export type DMessageGenerator = {
-  mgt: 'name';
-  name: string;
-} | {
-  mgt: 'aix';
-  model: string;                      // model that handled the request
-  vId: ModelVendorId;
-  sId: DModelSourceId;
-  mId: DLLMId;
-};
 
-
-// Metadata
+// Message > Metadata
 
 export interface DMessageMetadata {
   inReferenceTo?: DMetaReferenceItem[]; // text this was in reply to
-  ranOutOfTokens?: true;                // if the message was cut off due to token limit
 }
 
+/** A textual reference to a text snipped, by a certain role. */
 export interface DMetaReferenceItem {
-  mrt: 'dmsg';                          // for future type discrimination
+  mrt: 'dmsg';                        // for future type discrimination
   mText: string;
   mRole: DMessageRole;
   // messageId?: string;
 }
 
 
-// User Flags
+// Message > User Flags
 
 export type DMessageUserFlag =
-  | 'starred'; // user starred this
+  | 'aix.skip'                        // mark this message as skipped during generation (won't be sent to the LLM)
+  | 'starred'                         // user has starred this message
+  | 'vnd.ant.cache.auto'              // [Anthropic] user requested breakpoints to be added automatically (per conversation)
+  | 'vnd.ant.cache.user'              // [Anthropic] user requestd for a breakpoint to be added here specifically
+  ;
+
+export const MESSAGE_FLAG_AIX_SKIP: DMessageUserFlag = 'aix.skip';
+export const MESSAGE_FLAG_STARRED: DMessageUserFlag = 'starred';
+export const MESSAGE_FLAG_VND_ANT_CACHE_AUTO: DMessageUserFlag = 'vnd.ant.cache.auto';
+export const MESSAGE_FLAG_VND_ANT_CACHE_USER: DMessageUserFlag = 'vnd.ant.cache.user';
+
+
+// Message > Generator
+
+export type DMessageGenerator = ({
+  // A named generator is a simple string, presented as-is
+  mgt: 'named';
+  name: 'web' | 'issue' | 'help' | string;
+} | {
+  // An AIX generator preserves information about original model and vendor:
+  // - vendor ids will be stable across time
+  // - no guarantee of consistency on the model, e.g. could be across different devices
+  mgt: 'aix',
+  name: string;                       // model that handled the request
+  aix: {
+    vId: ModelVendorId;               // Models Vendor Id (note we deleted sId, was too much, but can add it later)
+    mId: DLLMId;                      // Models Id
+  },
+}) & {
+  metrics?: DChatGenerateMetricsMd;   // medium-sized metrics stored in the message
+  tokenStopReason?:
+    | 'client-abort'                  // if the generator stopped due to a client abort signal
+    | 'filter'                        // (inline filter message injected) if the generator stopped due to a filter
+    | 'issue'                         // (error fragment follows) if the generator stopped due to an issue
+    | 'out-of-tokens'                 // if the generator stopped due to running out of tokens
+};
 
 
 // helpers - creation
@@ -97,9 +127,9 @@ export function createDMessageFromFragments(role: DMessageRole, fragments: DMess
     // pendingIncomplete: false,  // we leave it undefined, same as false
 
     // absent
-    // purposeId: undefined,
-    // originLLM: undefined,
+    // purposeId: undefined, // @deprecated
     // metadata: undefined,
+    // generator: undefined,
     // userFlags: undefined,
 
     // @deprecated
@@ -123,8 +153,9 @@ export function duplicateDMessage(message: Readonly<DMessage>): DMessage {
     ...(message.pendingIncomplete ? { pendingIncomplete: true } : {}),
 
     purposeId: message.purposeId,
-    originLLM: message.originLLM,
+
     metadata: message.metadata ? duplicateDMessageMetadata(message.metadata) : undefined,
+    generator: message.generator ? duplicateDMessageGenerator(message.generator) : undefined,
     userFlags: message.userFlags ? [...message.userFlags] : undefined,
 
     tokenCount: message.tokenCount,
@@ -139,26 +170,49 @@ export function duplicateDMessageMetadata(metadata: Readonly<DMessageMetadata>):
   return { ...metadata };
 }
 
+export function duplicateDMessageGenerator(generator: Readonly<DMessageGenerator>): DMessageGenerator {
+  switch (generator.mgt) {
+    case 'named':
+      return {
+        mgt: 'named',
+        name: generator.name,
+        ...(generator.metrics ? { metrics: { ...generator.metrics } } : {}),
+        ...(generator.tokenStopReason ? { tokenStopReason: generator.tokenStopReason } : {}),
+      };
+    case 'aix':
+      return {
+        mgt: 'aix',
+        name: generator.name,
+        aix: { ...generator.aix },
+        ...(generator.metrics ? { metrics: { ...generator.metrics } } : {}),
+        ...(generator.tokenStopReason ? { tokenStopReason: generator.tokenStopReason } : {}),
+      };
+  }
+}
+
 
 // helpers - user flags
 
 const flag2EmojiMap: Record<DMessageUserFlag, string> = {
-  starred: '⭐️',
+  [MESSAGE_FLAG_AIX_SKIP]: '',
+  [MESSAGE_FLAG_STARRED]: '⭐️',
+  [MESSAGE_FLAG_VND_ANT_CACHE_AUTO]: '',
+  [MESSAGE_FLAG_VND_ANT_CACHE_USER]: '',
 };
 
 export function messageUserFlagToEmoji(flag: DMessageUserFlag): string {
-  return flag2EmojiMap[flag] || '❓';
+  return flag2EmojiMap[flag] ?? '❓';
 }
 
-export function messageHasUserFlag(message: DMessage, flag: DMessageUserFlag): boolean {
+export function messageHasUserFlag(message: Pick<DMessage, 'userFlags'>, flag: DMessageUserFlag): boolean {
   return message.userFlags?.includes(flag) ?? false;
 }
 
-export function messageToggleUserFlag(message: DMessage, flag: DMessageUserFlag): DMessageUserFlag[] {
-  if (message.userFlags?.includes(flag))
-    return message.userFlags.filter(_f => _f !== flag);
-  else
+export function messageSetUserFlag(message: Pick<DMessage, 'userFlags'>, flag: DMessageUserFlag, on: boolean): DMessageUserFlag[] {
+  if (on)
     return [...(message.userFlags || []), flag];
+  else
+    return (message.userFlags || []).filter(_f => _f !== flag);
 }
 
 

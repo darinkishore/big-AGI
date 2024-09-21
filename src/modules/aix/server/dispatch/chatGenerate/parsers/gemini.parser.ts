@@ -1,3 +1,4 @@
+import type { AixWire_Particles } from '../../../api/aix.wiretypes';
 import type { ChatGenerateParseFunction } from '../chatGenerate.dispatch';
 import type { IParticleTransmitter } from '../IParticleTransmitter';
 import { IssueSymbols } from '../ChatGenerateTransmitter';
@@ -21,12 +22,12 @@ import { GeminiWire_API_Generate_Content, GeminiWire_Safety } from '../../wirety
  *
  *  Note that non-streaming calls will contain a complete sequence of complete parts.
  */
-export function createGeminiGenerateContentResponseParser(modelId: string): ChatGenerateParseFunction {
+export function createGeminiGenerateContentResponseParser(modelId: string, isStreaming: boolean): ChatGenerateParseFunction {
   const parserCreationTimestamp = Date.now();
   const modelName = modelId.replace('models/', '');
   let hasBegun = false;
   let timeToFirstEvent: number;
-  let skipSendingTotalTimeOnce = true;
+  let skipComputingTotalsOnce = isStreaming;
 
   // this can throw, it's caught by the caller
   return function(pt: IParticleTransmitter, eventData: string): void {
@@ -153,14 +154,25 @@ export function createGeminiGenerateContentResponseParser(modelId: string): Chat
 
     // -> Stats
     if (generationChunk.usageMetadata) {
-      pt.setCounters({
-        chatIn: generationChunk.usageMetadata.promptTokenCount,
-        chatOut: generationChunk.usageMetadata.candidatesTokenCount,
-        chatTimeStart: timeToFirstEvent,
-        // chatTimeInner: // not reported
-        ...skipSendingTotalTimeOnce ? {} : { chatTimeTotal: Date.now() - parserCreationTimestamp }, // the second...end-1 packets will be held
-      });
-      skipSendingTotalTimeOnce = false;
+      const metricsUpdate: AixWire_Particles.CGSelectMetrics = {
+        TIn: generationChunk.usageMetadata.promptTokenCount,
+        TOut: generationChunk.usageMetadata.candidatesTokenCount,
+      };
+      if (isStreaming && timeToFirstEvent !== undefined)
+        metricsUpdate.dtStart = timeToFirstEvent;
+
+      // the first end-1 packet will be skipped (when streaming)
+      if (!skipComputingTotalsOnce) {
+        metricsUpdate.dtAll = Date.now() - parserCreationTimestamp;
+        if (!isStreaming && metricsUpdate.dtAll > timeToFirstEvent)
+          metricsUpdate.dtInner = metricsUpdate.dtAll - timeToFirstEvent;
+        if (isStreaming && metricsUpdate.TOut)
+          metricsUpdate.vTOutInner = Math.round(100 * 1000 /*ms/s*/ * metricsUpdate.TOut / (metricsUpdate.dtInner || metricsUpdate.dtAll)) / 100;
+      }
+      // the second (end) packet will be sent
+      skipComputingTotalsOnce = false;
+
+      pt.updateMetrics(metricsUpdate);
     }
 
   };

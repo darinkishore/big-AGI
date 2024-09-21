@@ -3,11 +3,13 @@ import * as React from 'react';
 import type { SxProps } from '@mui/joy/styles/types';
 import { Box, ColorPaletteProp, Tooltip } from '@mui/joy';
 
+import { DChatGeneratePricing, getLlmPriceForTokens } from '~/common/stores/llms/llms.pricing';
 import { adjustContentScaling, themeScalingMap } from '~/common/app.theme';
+import { formatModelsCost } from '~/common/util/costUtils';
 import { useUIContentScaling } from '~/common/state/store-ui';
 
 
-export function tokenCountsMathAndMessage(tokenLimit: number | 0, directTokens: number, historyTokens?: number, responseMaxTokens?: number, tokenPriceIn?: number, tokenPriceOut?: number): {
+export function tokenCountsMathAndMessage(tokenLimit: number | 0, directTokens: number, historyTokens?: number, responseMaxTokens?: number, chatPricing?: DChatGeneratePricing): {
   color: ColorPaletteProp,
   message: string,
   remainingTokens: number,
@@ -40,28 +42,47 @@ export function tokenCountsMathAndMessage(tokenLimit: number | 0, directTokens: 
       `     - Max response: ${_alignRight(responseMaxTokens || 0)}`;
 
     // add the price, if available
-    if (tokenPriceIn || tokenPriceOut) {
-      costMin = tokenPriceIn ? usedInputTokens * tokenPriceIn / 1E6 : undefined;
-      const costOutMax = (tokenPriceOut && responseMaxTokens) ? responseMaxTokens * tokenPriceOut / 1E6 : undefined;
-      if (costMin || costOutMax) {
+    if (chatPricing) {
+      const inputPrice = getLlmPriceForTokens(usedInputTokens, usedInputTokens, chatPricing.input);
+      const outputPrice = getLlmPriceForTokens(usedInputTokens, responseMaxTokens || 0, chatPricing.output);
+
+      costMin = inputPrice;
+      const costOutMax = outputPrice;
+
+      if (costMin !== undefined || costOutMax !== undefined) {
         message += `\n\n\n▶ Chat Turn Cost (max, approximate)\n`;
 
-        if (costMin) message += '\n' +
-          `       Input tokens: ${_alignRight(usedInputTokens)}\n` +
-          `    Input Price $/M: ${tokenPriceIn!.toFixed(2).padStart(8)}\n` +
-          `         Input cost: ${('$' + costMin!.toFixed(4)).padStart(8)}\n`;
+        if (costMin !== undefined) {
+          const inputPricePerM = costMin * 1e6 / usedInputTokens;
+          message += '\n' +
+            `       Input tokens: ${_alignRight(usedInputTokens)}\n` +
+            `    Input Price $/M: ${inputPricePerM.toFixed(2).padStart(8)}\n` +
+            `         Input cost: ${('$' + costMin.toFixed(4)).padStart(8)}\n`;
+        }
 
-        if (costOutMax) message += '\n' +
-          `  Max output tokens: ${_alignRight(responseMaxTokens!)}\n` +
-          `   Output Price $/M: ${tokenPriceOut!.toFixed(2).padStart(8)}\n` +
-          `    Max output cost: ${('$' + costOutMax!.toFixed(4)).padStart(8)}\n`;
+        if (costOutMax !== undefined) {
+          const outputPricePerM = costOutMax * 1e6 / (responseMaxTokens || 1);
+          message += '\n' +
+            `  Max output tokens: ${_alignRight(responseMaxTokens!)}\n` +
+            `   Output Price $/M: ${outputPricePerM.toFixed(2).padStart(8)}\n` +
+            `    Max output cost: ${('$' + costOutMax.toFixed(4)).padStart(8)}\n`;
+        }
 
-        if (costMin) message += '\n' +
-          ` > Min message cost: <span class="highlight-cost yellow">${formatTokenCost(costMin).padStart(8)}</span>`;
-        costMax = (costMin && costOutMax) ? costMin + costOutMax : undefined;
-        if (costMax) message += '\n' +
-          ` < Max message cost: <span>${formatTokenCost(costMax).padStart(8)}</span>\n` +
-          '   (depends on assistant response)';
+        if (costMin !== undefined) {
+          message += '\n' +
+            ` > Min message cost: <span class="highlight-cost yellow">${formatModelsCost(costMin).padStart(8)}</span>`;
+        }
+
+        costMax = (costMin !== undefined && costOutMax !== undefined) ? costMin + costOutMax : undefined;
+        if (costMax !== undefined) {
+          message += '\n' +
+            ` < Max message cost: <span>${formatModelsCost(costMax).padStart(8)}</span>\n` +
+            '   (depends on assistant response)';
+        }
+
+        // if (hack_lastMessageCosts)
+        //   message += '\n\n  ' +
+        //     `Last message cost: ${hack_lastMessageCosts}\n`;
       }
     }
   }
@@ -86,12 +107,6 @@ export function tokenCountsMathAndMessage(tokenLimit: number | 0, directTokens: 
 function _alignRight(value: number, columnSize: number = 8) {
   const str = value.toLocaleString();
   return str.padStart(columnSize);
-}
-
-export function formatTokenCost(cost: number) {
-  return cost < 1
-    ? (cost * 100).toFixed(cost < 0.010 ? 2 : 2) + ' ¢'
-    : '$ ' + cost.toFixed(2);
 }
 
 const tooltipMessageSx: SxProps = {

@@ -12,8 +12,7 @@ import TelegramIcon from '@mui/icons-material/Telegram';
 
 import { ChatMessageMemo } from '../../../apps/chat/components/message/ChatMessage';
 
-import type { DLLMId } from '~/modules/llms/store-llms';
-
+import type { DLLMId } from '~/common/stores/llms/llms.types';
 import { GoodTooltip } from '~/common/components/GoodTooltip';
 import { InlineError } from '~/common/components/InlineError';
 import { animationEnterBelow } from '~/common/util/animUtils';
@@ -111,7 +110,8 @@ function RayControls(props: {
 
 export function BeamRay(props: {
   beamStore: BeamStoreApi,
-  hadImportedRays: boolean
+  hadImportedRays: boolean,
+  isMobile: boolean,
   isRemovable: boolean,
   rayId: string,
   rayIndexWeak: number,
@@ -158,8 +158,8 @@ export function BeamRay(props: {
     const { rays, onSuccessCallback } = props.beamStore.getState();
     const ray = rays.find(ray => ray.rayId === props.rayId);
     if (ray && ray.message.fragments.length && onSuccessCallback)
-      onSuccessCallback(ray.message.fragments, llmId || '');
-  }, [llmId, props.beamStore, props.rayId]);
+      onSuccessCallback(ray.message);
+  }, [props.beamStore, props.rayId]);
 
   const handleRayRemove = React.useCallback(() => {
     removeRay(props.rayId);
@@ -207,8 +207,9 @@ export function BeamRay(props: {
             <ChatMessageMemo
               message={ray.message}
               fitScreen={true}
+              isMobile={props.isMobile}
               hideAvatar
-              showUnsafeHtml={true}
+              showUnsafeHtmlCode={true}
               adjustContentScaling={-1}
               sx={!cardScrolling ? beamCardMessageSx : beamCardMessageScrollingSx}
             />

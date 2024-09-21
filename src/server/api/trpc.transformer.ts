@@ -18,17 +18,31 @@ import superjson from 'superjson';
  *
  * May be related to https://github.com/blitz-js/superjson/issues/242 ?
  * May be related to https://github.com/blitz-js/superjson/issues/283 ?
+ *
+ * NOTEs:
+ * - 2024-08-10 (1): this doesn't seem to be needed anymore, as such we use plain `superjson` as-is
+ * - 2024-08-10 (2): this is actually still needed: the issue is when delivering input data to tRPC calls,
+ *     where nulls won't be converted to `undefined`. Furthermore, add the `shallowClone` function to handle
+ *     the case of arrays, in addition to objects.
  */
 function deserializeWithWorkaround<T = unknown>(object: any): T {
 
   // Second-level (object.json: {..}) mutability workaround
-  if (object && object instanceof Object && object?.meta && object?.json) {
-    object = { ...object, json: { ...object.json } };
-  }
+  // This triggers when both `meta` and `json` are present, which means SuperJSON has
+  // special instructionf for the `json` object.
+  if (object && object instanceof Object && object?.meta && object?.json)
+    object = { ...object, json: shallowClone(object.json) };
 
   return superjson.deserialize<T>(object);
 }
 
+function shallowClone(obj: any): any {
+  if (obj === null || typeof obj !== 'object')
+    return obj;
+  if (Array.isArray(obj))
+    return [...obj];
+  return { ...obj };
+}
 
 export const transformer = {
   serialize: superjson.serialize,

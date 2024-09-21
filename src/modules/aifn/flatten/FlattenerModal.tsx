@@ -6,10 +6,10 @@ import ReplayIcon from '@mui/icons-material/Replay';
 
 import { useStreamChatText } from '~/modules/aifn/useStreamChatText';
 
-import { ConfirmationModal } from '~/common/components/ConfirmationModal';
+import { ConfirmationModal } from '~/common/components/modals/ConfirmationModal';
 import { ConversationsManager } from '~/common/chat-overlay/ConversationsManager';
 import { DConversationId } from '~/common/stores/chat/chat.conversation';
-import { GoodModal } from '~/common/components/GoodModal';
+import { GoodModal } from '~/common/components/modals/GoodModal';
 import { InlineTextarea } from '~/common/components/InlineTextarea';
 import { createDMessageTextContent, DMessage, messageFragmentsReduceText } from '~/common/stores/chat/chat.message';
 import { getConversation } from '~/common/stores/chat/store-chats';
@@ -82,7 +82,7 @@ function encodeConversationAsUserMessage(userPrompt: string, messages: DMessage[
 
 export function FlattenerModal(props: {
   conversationId: string | null,
-  onConversationBranch: (conversationId: DConversationId, messageId: string | null) => DConversationId | null,
+  onConversationBranch: (conversationId: DConversationId, messageId: string | null, addSplitPane: boolean) => DConversationId | null,
   onClose: () => void,
 }) {
 
@@ -137,7 +137,7 @@ export function FlattenerModal(props: {
     if (!props.conversationId || !selectedStyle || !flattenedText) return;
     let newConversationId: string | null = props.conversationId;
     if (branch)
-      newConversationId = props.onConversationBranch(props.conversationId, null);
+      newConversationId = props.onConversationBranch(props.conversationId, null, false /* no pane from Flatter new */);
     if (newConversationId) {
       const ncHandler = ConversationsManager.getHandler(newConversationId);
       const newRootMessage = createDMessageTextContent('user', flattenedText);// [new chat] user:former chat summary

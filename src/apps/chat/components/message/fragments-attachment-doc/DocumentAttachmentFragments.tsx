@@ -7,7 +7,7 @@ import type { DMessageRole } from '~/common/stores/chat/chat.message';
 
 import type { ChatMessageTextPartEditState } from '../ChatMessage';
 import { DocAttachmentFragmentButton } from './DocAttachmentFragmentButton';
-import { DocAttachmentFragmentEditor } from './DocAttachmentFragmentEditor';
+import { DocAttachmentFragment } from './DocAttachmentFragment';
 
 
 /**
@@ -19,21 +19,30 @@ export function DocumentAttachmentFragments(props: {
   attachmentFragments: DMessageAttachmentFragment[],
   messageRole: DMessageRole,
   contentScaling: ContentScaling,
-  isMobile?: boolean,
+  isMobile: boolean,
   zenMode: boolean,
-  renderTextAsMarkdown: boolean,
+  allowSelection: boolean,
+  disableMarkdownText: boolean,
   onFragmentDelete: (fragmentId: DMessageFragmentId) => void,
   onFragmentReplace: (fragmentId: DMessageFragmentId, newFragment: DMessageAttachmentFragment) => void,
 }) {
 
   // state
-  const [activeFragmentId, setActiveFragmentId] = React.useState<DMessageFragmentId | null>(null);
+  const [_activeFragmentId, setActiveFragmentId] = React.useState<DMessageFragmentId | null>(null);
   const [editState, setEditState] = React.useState<ChatMessageTextPartEditState | null>(null);
+
+
+  // derived state
+  const isSelectable = props.allowSelection;
+  const activeFragmentId = !isSelectable ? null : _activeFragmentId;
 
 
   // selection
 
-  const handleToggleSelectedId = React.useCallback((fragmentId: DMessageFragmentId) => setActiveFragmentId(prevId => prevId === fragmentId ? null : fragmentId), []);
+  const handleToggleSelectedId = React.useCallback((fragmentId: DMessageFragmentId) => {
+    if (isSelectable)
+      setActiveFragmentId(prevId => prevId === fragmentId ? null : fragmentId);
+  }, [isSelectable]);
 
   const selectedFragment = props.attachmentFragments.find(fragment => fragment.fId === activeFragmentId);
 
@@ -60,6 +69,17 @@ export function DocumentAttachmentFragments(props: {
   }, []);
 
 
+  // memos
+  const buttonsSx = React.useMemo(() => ({
+    // layout
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 1,
+    justifyContent: props.messageRole === 'assistant' ? 'flex-start' : 'flex-end',
+    ...selectedFragment && { mb: 1 },
+  }), [props.messageRole, selectedFragment]);
+
+
   return (
     <Box aria-label={`${props.attachmentFragments.length} attachments`} sx={{
       // layout
@@ -67,22 +87,15 @@ export function DocumentAttachmentFragments(props: {
       flexDirection: 'column',
     }}>
 
-      {/* Horizontally scrollable Document buttons */}
-      <Box sx={{
-        pb: 0.5, // 4px:  to show the button shadow
-
-        // layout
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: 1,
-        justifyContent: props.messageRole === 'assistant' ? 'flex-start' : 'flex-end',
-      }}>
+      {/* Document buttons */}
+      <Box sx={buttonsSx}>
         {props.attachmentFragments.map((attachmentFragment) =>
           <DocAttachmentFragmentButton
             key={attachmentFragment.fId}
             fragment={attachmentFragment}
             contentScaling={props.contentScaling}
             isSelected={activeFragmentId === attachmentFragment.fId}
+            isSelectable={props.allowSelection}
             toggleSelected={handleToggleSelectedId}
           />,
         )}
@@ -90,7 +103,7 @@ export function DocumentAttachmentFragments(props: {
 
       {/* Document Viewer & Editor */}
       {!!selectedFragment && (
-        <DocAttachmentFragmentEditor
+        <DocAttachmentFragment
           key={selectedFragment.fId /* this is here for the useLiveFile hook which otherwise would migrate state across fragments */}
           fragment={selectedFragment}
           messageRole={props.messageRole}
@@ -99,7 +112,7 @@ export function DocumentAttachmentFragments(props: {
           contentScaling={props.contentScaling}
           isMobile={props.isMobile}
           zenMode={props.zenMode}
-          renderTextAsMarkdown={props.renderTextAsMarkdown}
+          disableMarkdownText={props.disableMarkdownText}
           onFragmentDelete={props.onFragmentDelete}
           onFragmentReplace={handleFragmentReplace}
         />

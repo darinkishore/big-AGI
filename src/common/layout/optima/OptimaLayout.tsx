@@ -2,15 +2,17 @@ import * as React from 'react';
 import { useRouter } from 'next/router';
 import { PanelGroup } from 'react-resizable-panels';
 
+import { Is } from '~/common/util/pwaUtils';
 import { checkVisibleNav, navItems } from '~/common/app.nav';
-import { isMacUser } from '~/common/util/pwaUtils';
 import { useGlobalShortcuts } from '~/common/components/shortcuts/useGlobalShortcuts';
 import { useIsMobile } from '~/common/components/useMatchMedia';
 import { useUIPreferencesStore } from '~/common/state/store-ui';
 
-import { DesktopDrawer } from './DesktopDrawer';
-import { DesktopNav } from './DesktopNav';
-import { MobileDrawer } from './MobileDrawer';
+import { DesktopDrawer } from './drawer/DesktopDrawer';
+import { DesktopNav } from './nav/DesktopNav';
+import { DesktopPanel } from './panel/DesktopPanel';
+import { MobileDrawer } from './drawer/MobileDrawer';
+import { MobilePanel } from './panel/MobilePanel';
 import { Modals } from './Modals';
 import { PageWrapper } from './PageWrapper';
 import { optimaActions, optimaOpenModels, optimaOpenPreferences } from './useOptima';
@@ -51,21 +53,24 @@ export function OptimaLayout(props: { suspendAutoModelsSetup?: boolean, children
   const currentApp = navItems.apps.find(item => item.route === route);
 
   // global shortcuts for Optima
-  useGlobalShortcuts('App', React.useMemo(() => [
-    { key: 'h', ctrl: true, shift: true, action: '_specialPrintShortcuts' },
-    { key: isMacUser ? '/' : '?', ctrl: true, shift: true, action: optimaActions().openKeyboardShortcuts },
-    // Preferences
+  useGlobalShortcuts('OptimaApp', React.useMemo(() => [
+    // Preferences & Model dialogs
     { key: ',', ctrl: true, action: optimaOpenPreferences },
-    // Models
     { key: 'm', ctrl: true, shift: true, action: optimaOpenModels },
     // Font Scale
     { key: '+', ctrl: true, shift: true, action: useUIPreferencesStore.getState().increaseContentScaling },
     { key: '-', ctrl: true, shift: true, action: useUIPreferencesStore.getState().decreaseContentScaling },
+    // Shortcuts
+    { key: Is.OS.MacOS ? '/' : '?', ctrl: true, shift: true, action: optimaActions().openKeyboardShortcuts },
+    { key: 'h', ctrl: true, shift: true, action: '_specialPrintShortcuts' },
   ], []));
 
   return <>
 
     <PanelGroup direction='horizontal' id='root-layout' style={isMobile ? undoPanelGroupSx : undefined}>
+
+
+      {/* Desktop: 4 horizontal sections: Nav | Drawer | Page | Panel */}
 
       {!isMobile && checkVisibleNav(currentApp) && <DesktopNav component='nav' currentApp={currentApp} />}
 
@@ -77,7 +82,15 @@ export function OptimaLayout(props: { suspendAutoModelsSetup?: boolean, children
       </PageWrapper>
       {/*</Panel>*/}
 
+      {!isMobile && <DesktopPanel key='optima-panel' component='aside' currentApp={currentApp} />}
+
+
+      {/* Mobile - 2 panes overlay the Page */}
+
       {isMobile && <MobileDrawer key='optima-drawer' component='aside' currentApp={currentApp} />}
+
+      {isMobile && <MobilePanel key='optima-panel' component='aside' currentApp={currentApp} />}
+
 
     </PanelGroup>
 

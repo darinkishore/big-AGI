@@ -1,13 +1,13 @@
 import * as React from 'react';
 
 import { Button } from '@mui/joy';
-import ExitToAppIcon from '@mui/icons-material/ExitToApp';
+import ShareOutlinedIcon from '@mui/icons-material/ShareOutlined';
 
 import { getChatShowSystemMessages } from '../../../apps/chat/store-app-chat';
 
 import type { DConversationId } from '~/common/stores/chat/chat.conversation';
 import { Brand } from '~/common/app.config';
-import { ConfirmationModal } from '~/common/components/ConfirmationModal';
+import { ConfirmationModal } from '~/common/components/modals/ConfirmationModal';
 import { Link } from '~/common/components/Link';
 import { apiAsyncNode } from '~/common/util/trpc.client';
 import { getConversation } from '~/common/stores/chat/store-chats';
@@ -84,7 +84,7 @@ export function PublishExport(props: {
       variant='soft' disabled={!hasConversation || publishUploading}
       loading={publishUploading}
       color={publishResponse ? 'success' : 'primary'}
-      endDecorator={<ExitToAppIcon />}
+      endDecorator={<ShareOutlinedIcon />}
       sx={{ minWidth: 240, justifyContent: 'space-between' }}
       onClick={handlePublishConversation}
     >

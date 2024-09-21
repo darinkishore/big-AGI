@@ -1,8 +1,8 @@
 import { Agent } from '~/modules/aifn/react/react';
-import { DLLMId } from '~/modules/llms/store-llms';
 import { useBrowseStore } from '~/modules/browse/store-module-browsing';
 
 import type { ConversationHandler } from '~/common/chat-overlay/ConversationHandler';
+import type { DLLMId } from '~/common/stores/llms/llms.types';
 import { createErrorContentFragment, createTextContentFragment } from '~/common/stores/chat/chat.fragments';
 
 // configuration
@@ -22,19 +22,19 @@ export async function runReActUpdatingState(cHandler: ConversationHandler, quest
   const assistantModelLabel = 'react-' + assistantLlmId; //.slice(4, 7); // HACK: this is used to change the Avatar animation
   const { assistantMessageId, placeholderFragmentId } = cHandler.messageAppendAssistantPlaceholder(
     '...',
-    { originLLM: assistantModelLabel },
+    { generator: { mgt: 'named', name: assistantModelLabel } },
   );
   const { enableReactTool: enableBrowse } = useBrowseStore.getState();
 
   // create an ephemeral space
-  const eHandler = cHandler.createEphemeral(`Reason+Act`, 'Initializing ReAct..');
+  const hEphemeral = cHandler.createEphemeralHandler(`Reason+Act`, 'Initializing ReAct..');
   let ephemeralText = '';
   const logToEphemeral = (text: string) => {
     console.log(text);
     ephemeralText += (text.length > 300 ? text.slice(0, 300) + '...' : text) + '\n';
-    eHandler.updateText(ephemeralText);
+    hEphemeral.updateText(ephemeralText);
   };
-  const showStateInEphemeral = (state: object) => eHandler.updateState(state);
+  const showStateInEphemeral = (state: object) => hEphemeral.updateState(state);
 
   try {
 
@@ -44,7 +44,8 @@ export async function runReActUpdatingState(cHandler: ConversationHandler, quest
 
     cHandler.messageFragmentReplace(assistantMessageId, placeholderFragmentId, createTextContentFragment(reactResult), true);
 
-    setTimeout(() => eHandler.delete(), EPHEMERAL_DELETION_DELAY);
+    hEphemeral.markAsDone();
+    setTimeout(() => hEphemeral.deleteIfNotPinned(), EPHEMERAL_DELETION_DELAY);
 
     return true;
   } catch (error: any) {

@@ -5,13 +5,15 @@ import { Box, IconButton, ListItemButton, ListItemDecorator } from '@mui/joy';
 import BuildCircleIcon from '@mui/icons-material/BuildCircle';
 import SettingsIcon from '@mui/icons-material/Settings';
 
-import { DLLM, DLLMId, DModelSourceId, useModelsStore } from '~/modules/llms/store-llms';
-import { findVendorById } from '~/modules/llms/vendors/vendors.registry';
+import { findModelVendor } from '~/modules/llms/vendors/vendors.registry';
 
+import type { DLLM, DLLMId } from '~/common/stores/llms/llms.types';
+import type { DModelsServiceId } from '~/common/stores/llms/modelsservice.types';
 import { DebouncedInputMemo } from '~/common/components/DebouncedInput';
-import { DropdownItems, PageBarDropdownMemo } from '~/common/layout/optima/components/PageBarDropdown';
+import { OptimaBarDropdownMemo, OptimaDropdownItems } from '~/common/layout/optima/bar/OptimaBarDropdown';
 import { GoodTooltip } from '~/common/components/GoodTooltip';
 import { KeyStroke } from '~/common/components/KeyStroke';
+import { findModelsServiceOrNull, llmsStoreActions, useModelsStore } from '~/common/stores/llms/store-llms';
 import { optimaActions, optimaOpenModels } from '~/common/layout/optima/useOptima';
 
 
@@ -40,9 +42,9 @@ function LLMDropdown(props: {
   }, [chatLlmId]);
 
 
-  const llmDropdownItems: DropdownItems = React.useMemo(() => {
-    const llmItems: DropdownItems = {};
-    let prevSourceId: DModelSourceId | null = null;
+  const llmDropdownItems: OptimaDropdownItems = React.useMemo(() => {
+    const llmItems: OptimaDropdownItems = {};
+    let prevServiceId: DModelsServiceId | null = null;
     let sepCount = 0;
 
     const lcFilterString = filterString?.toLowerCase();
@@ -59,16 +61,16 @@ function LLMDropdown(props: {
     });
 
     for (const llm of filteredLLMs) {
-      // add separators when changing sources
-      if (!prevSourceId || llm.sId !== prevSourceId) {
-        const llmVendor = findVendorById(llm._source?.vId ?? undefined);
-        const sourceName = llmVendor?.name || llm.sId;
+      // add separators when changing services
+      if (!prevServiceId || llm.sId !== prevServiceId) {
+        const vendor = findModelVendor(llm.vId);
+        const serviceLabel = findModelsServiceOrNull(llm.sId)?.label || vendor?.name || llm.sId;
         llmItems[`sep-${llm.sId}`] = {
           type: 'separator',
-          title: sourceName,
-          icon: llmVendor?.Icon ? <llmVendor.Icon /> : undefined,
+          title: serviceLabel,
+          icon: vendor?.Icon ? <vendor.Icon /> : undefined,
         };
-        prevSourceId = llm.sId;
+        prevServiceId = llm.sId;
         sepCount++;
       }
 
@@ -96,7 +98,7 @@ function LLMDropdown(props: {
     <GoodTooltip title={
       <Box sx={{ px: 1, py: 0.75, lineHeight: '1.5rem' }}>
         Model Options
-        <KeyStroke combo='Ctrl + Shift + O' sx={{ my: 0.5 }} />
+        <KeyStroke variant='outlined' combo='Ctrl + Shift + O' sx={{ my: 0.5 }} />
       </Box>
     }>
       <IconButton
@@ -156,7 +158,7 @@ function LLMDropdown(props: {
       <ListItemDecorator><BuildCircleIcon color='success' /></ListItemDecorator>
       <Box sx={{ flexGrow: 1, display: 'flex', justifyContent: 'space-between', gap: 1 }}>
         Models
-        <KeyStroke combo='Ctrl + Shift + M' sx={{ ml: 2 }} />
+        <KeyStroke variant='outlined' combo='Ctrl + Shift + M' sx={{ ml: 2 }} />
       </Box>
     </ListItemButton>
 
@@ -164,7 +166,7 @@ function LLMDropdown(props: {
 
 
   return (
-    <PageBarDropdownMemo
+    <OptimaBarDropdownMemo
       items={llmDropdownItems}
       value={chatLlmId}
       onChange={handleChatLLMChange}
@@ -179,16 +181,14 @@ function LLMDropdown(props: {
 
 export function useChatLLMDropdown() {
   // external state
-  const { llms, chatLLMId, setChatLLMId } = useModelsStore(useShallow(state => ({
+  const { llms, chatLLMId } = useModelsStore(useShallow(state => ({
     llms: state.llms, // NOTE: we don't need a deep comparison as we reference the same array
     chatLLMId: state.chatLLMId,
-    setChatLLMId: state.setChatLLMId,
   })));
 
-  const chatLLMDropdown = React.useMemo(
-    () => <LLMDropdown llms={llms} chatLlmId={chatLLMId} setChatLlmId={setChatLLMId} />,
-    [llms, chatLLMId, setChatLLMId],
-  );
+  const chatLLMDropdown = React.useMemo(() => {
+    return <LLMDropdown llms={llms} chatLlmId={chatLLMId} setChatLlmId={llmsStoreActions().setChatLLMId} />;
+  }, [llms, chatLLMId]);
 
   return { chatLLMId, chatLLMDropdown };
 }

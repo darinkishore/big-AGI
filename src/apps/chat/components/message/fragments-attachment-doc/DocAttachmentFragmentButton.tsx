@@ -15,7 +15,7 @@ import { DMessageAttachmentFragment, DMessageFragmentId, DVMimeType, isDocPart }
 import { LiveFileIcon } from '~/common/livefile/liveFile.icons';
 import { TooltipOutlined } from '~/common/components/TooltipOutlined';
 import { ellipsizeMiddle } from '~/common/util/textUtils';
-import { useLiveFileMetadata } from '~/common/livefile/liveFile.hooks';
+import { useLiveFileMetadata } from '~/common/livefile/useLiveFileMetadata';
 
 
 // configuration
@@ -23,7 +23,7 @@ export const DocSelColor: ColorPaletteProp = 'primary';
 const DocUnselColor: ColorPaletteProp = 'primary';
 
 
-export function buttonIconForFragment({ part }: DMessageAttachmentFragment): React.ComponentType<any> {
+export function buttonIconForFragment(part: DMessageAttachmentFragment['part']): React.ComponentType<any> {
   switch (part.pt) {
     case 'doc':
       switch (part.vdt) {
@@ -57,6 +57,7 @@ export function DocAttachmentFragmentButton(props: {
   fragment: DMessageAttachmentFragment,
   contentScaling: ContentScaling,
   isSelected: boolean,
+  isSelectable: boolean,
   toggleSelected: (fragmentId: DMessageFragmentId) => void,
 }) {
 
@@ -90,7 +91,7 @@ export function DocAttachmentFragmentButton(props: {
     fontSize: themeScalingMap[props.contentScaling]?.fragmentButtonFontSize ?? undefined,
     border: '1px solid',
     borderRadius: 'sm',
-    boxShadow: 'xs',
+    boxShadow: `0px 3px 4px -2px rgb(var(--joy-palette-${isSelected ? DocSelColor : DocUnselColor}-darkChannel) / ${isSelected ? 50 : 20}%)`,
     ...isSelected ? {
       borderColor: `${DocSelColor}.solidBg`,
     } : {
@@ -104,13 +105,14 @@ export function DocAttachmentFragmentButton(props: {
 
   const buttonText = ellipsizeMiddle(fragment.part.l1Title || fragment.title || 'Document', 28 /* totally arbitrary length */);
 
-  const Icon = isSelected ? ExpandCircleDownIcon : buttonIconForFragment(fragment);
+  const Icon = isSelected ? ExpandCircleDownIcon : buttonIconForFragment(fragment.part);
 
   return (
     <Button
       size={props.contentScaling === 'md' ? 'md' : 'sm'}
       variant={isSelected ? 'solid' : 'soft'}
       color={isSelected ? DocSelColor : DocUnselColor}
+      disabled={!props.isSelectable}
       onClick={handleSelectFragment}
       sx={buttonSx}
     >

@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 import type { ContentScaling, UIComplexityMode } from '~/common/app.theme';
-import { browserLangOrUS } from '~/common/util/pwaUtils';
+import { BrowserLang } from '~/common/util/pwaUtils';
 
 
 // UI Preferences
@@ -26,14 +26,14 @@ interface UIPreferencesStore {
   increaseContentScaling: () => void;
   decreaseContentScaling: () => void;
 
+  disableMarkdown: boolean;
+  setDisableMarkdown: (disableMarkdown: boolean) => void;
+
   doubleClickToEdit: boolean;
   setDoubleClickToEdit: (doubleClickToEdit: boolean) => void;
 
   enterIsNewline: boolean;
   setEnterIsNewline: (enterIsNewline: boolean) => void;
-
-  renderMarkdown: boolean;
-  setRenderMarkdown: (renderMarkdown: boolean) => void;
 
   renderCodeLineNumbers: boolean;
   setRenderCodeLineNumbers: (renderCodeLineNumbers: boolean) => void;
@@ -58,7 +58,7 @@ export const useUIPreferencesStore = create<UIPreferencesStore>()(
 
       // UI Features
 
-      preferredLanguage: browserLangOrUS,
+      preferredLanguage: BrowserLang.orUS,
       setPreferredLanguage: (preferredLanguage: string) => set({ preferredLanguage }),
 
       centerMode: 'wide',
@@ -73,14 +73,14 @@ export const useUIPreferencesStore = create<UIPreferencesStore>()(
       increaseContentScaling: () => set((state) => state.contentScaling === 'md' ? state : { contentScaling: state.contentScaling === 'xs' ? 'sm' : 'md' }),
       decreaseContentScaling: () => set((state) => state.contentScaling === 'xs' ? state : { contentScaling: state.contentScaling === 'md' ? 'sm' : 'xs' }),
 
-      doubleClickToEdit: true,
+      doubleClickToEdit: false,
       setDoubleClickToEdit: (doubleClickToEdit: boolean) => set({ doubleClickToEdit }),
+
+      disableMarkdown: false,
+      setDisableMarkdown: (disableMarkdown: boolean) => set({ disableMarkdown }),
 
       enterIsNewline: false,
       setEnterIsNewline: (enterIsNewline: boolean) => set({ enterIsNewline }),
-
-      renderMarkdown: true,
-      setRenderMarkdown: (renderMarkdown: boolean) => set({ renderMarkdown }),
 
       renderCodeLineNumbers: false,
       setRenderCodeLineNumbers: (renderCodeLineNumbers: boolean) => set({ renderCodeLineNumbers }),
@@ -111,7 +111,7 @@ export const useUIPreferencesStore = create<UIPreferencesStore>()(
 
       /* versioning:
        * 1: rename 'enterToSend' to 'enterIsNewline' (flip the meaning)
-       * 2: deault 'contentScaling' to 'sm'
+       * 2: new Big-AGI 2 defaults
        */
       version: 2,
 
@@ -121,9 +121,11 @@ export const useUIPreferencesStore = create<UIPreferencesStore>()(
         if (state && fromVersion < 1)
           state.enterIsNewline = state['enterToSend'] === false;
 
-        // 2: deault 'contentScaling' to 'sm'
-        if (state && fromVersion < 2)
+        // 2: new Big-AGI 2 defaults
+        if (state && fromVersion < 2) {
           state.contentScaling = 'sm';
+          state.doubleClickToEdit = false;
+        }
 
         return state;
       },

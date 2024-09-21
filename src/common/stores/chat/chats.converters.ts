@@ -1,9 +1,10 @@
 import type { SystemPurposeId } from '../../../data';
 
-import type { DModelSource } from '~/modules/llms/store-llms';
-
 import type { DFolder } from '~/common/state/store-folders';
+import type { LiveFileId } from '~/common/livefile/liveFile.types';
 import { liveFileGetAllValidIDs } from '~/common/livefile/store-live-file';
+
+import type { DModelsService } from '~/common/stores/llms/modelsservice.types';
 
 import { createDConversation, DConversation, type DConversationId } from './chat.conversation';
 import { createDMessageTextContent, DMessage } from './chat.message';
@@ -12,19 +13,27 @@ import { createErrorContentFragment, isAttachmentFragment, isContentFragment, is
 
 export namespace V4ToHeadConverters {
 
-  export function inMemHeadCleanDConversation(c: DConversation): void {
+  export function inMemHeadCleanDConversations(cs: DConversation[]): void {
+    const validLiveFileIDs = liveFileGetAllValidIDs();
+    for (const c of cs)
+      _inMemHeadCleanDConversation(c, validLiveFileIDs);
+  }
+
+  function _inMemHeadCleanDConversation(c: DConversation, validLiveFileIDs: LiveFileId[]): void {
     // re-add transient properties
     c._abortController = null;
 
     // fixup .messages[]
     if (!c.messages)
       c.messages = [];
-    c.messages.forEach(inMemHeadCleanDMessage);
+
+    for (const message of c.messages)
+      inMemHeadCleanDMessage(message, validLiveFileIDs);
   }
 
 
   /** Used by: chat-store (load), recreation of DMessage */
-  export function inMemHeadCleanDMessage(m: DMessage): void {
+  export function inMemHeadCleanDMessage(m: DMessage, validLiveFileIDs: LiveFileId[]): void {
 
     // reset transient properties
     delete m.pendingIncomplete;
@@ -34,11 +43,10 @@ export namespace V4ToHeadConverters {
     delete (m as any).typing;
 
     // fixup .fragments[]
-    const validLiveFileIDs = liveFileGetAllValidIDs();
     for (let i = 0; i < m.fragments.length; i++) {
       const fragment = m.fragments[i];
 
-      // [GC][LiveFile] remove LiveFile references to invalid objects
+      // [GC][LiveFile] remove LiveFile references to invalid objects (also done in store-client-workspace)
       if (isAttachmentFragment(fragment) && fragment.liveFileId)
         if (!validLiveFileIDs.includes(fragment.liveFileId))
           delete fragment.liveFileId;
@@ -76,6 +84,12 @@ export namespace V4ToHeadConverters {
       m.metadata.inReferenceTo = [{
         mrt: 'dmsg', mText: replyToText, mRole: 'assistant',
       }];
+    }
+
+    // uplevel generator (REMOVE FOR 2.0.0)
+    if ('originLLM' in m && !m.generator) {
+      m.generator = { 'mgt': 'named', name: m.originLLM as string };
+      delete m.originLLM;
     }
   }
 
@@ -137,7 +151,7 @@ export namespace DataAtRestV1 {
   /// Head -> Rest V1 ///
 
   /** Used by: downloadAllJsonV1B */
-  export function formatAllToJsonV1B(conversations: DConversation[], modelSources: DModelSource[], folders: DFolder[], enableFolders: boolean): RestAllJsonV1B {
+  export function formatAllToJsonV1B(conversations: DConversation[], modelSources: DModelsService[], folders: DFolder[], enableFolders: boolean): RestAllJsonV1B {
     return {
       conversations: (conversations || []).map(formatChatToJsonV1),
       models: { sources: modelSources },
@@ -164,7 +178,7 @@ export namespace DataAtRestV1 {
 
   export type RestAllJsonV1B = {
     conversations: RestChatJsonV1[];
-    models: { sources: DModelSource[] };
+    models: { sources: DModelsService[] };
     folders?: { folders: RestFolderJsonV1[]; enableFolders: boolean };
   }
 
@@ -241,7 +255,7 @@ export namespace V3StoreDataToHead {
       cm = createDMessageTextContent(role, text);
       if (id) cm.id = id;
       if (purposeId) cm.purposeId = purposeId;
-      if (originLLM) cm.originLLM = originLLM;
+      if (originLLM) cm.generator = { 'mgt': 'named', name: originLLM };
       if (metadata?.inReplyToText) {
         if (!cm.metadata) cm.metadata = {};
         cm.metadata.inReferenceTo = [{ mrt: 'dmsg', mText: metadata.inReplyToText, mRole: 'assistant' }];
@@ -252,7 +266,7 @@ export namespace V3StoreDataToHead {
       if (updated) cm.updated = updated;
 
     }
-    V4ToHeadConverters.inMemHeadCleanDMessage(cm);
+    V4ToHeadConverters.inMemHeadCleanDMessage(cm, liveFileGetAllValidIDs());
     return cm;
   }
 

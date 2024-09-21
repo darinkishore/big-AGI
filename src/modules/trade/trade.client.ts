@@ -1,15 +1,14 @@
 import { fileOpen, fileSave, FileWithHandle } from 'browser-fs-access';
 
 import { SystemPurposeId, SystemPurposes } from '../../data';
-
-import { useModelsStore } from '~/modules/llms/store-llms';
+import { prettyShortChatModelName } from '../../apps/chat/components/message/messageUtils';
 
 import { Brand } from '~/common/app.config';
 import { DataAtRestV1 } from '~/common/stores/chat/chats.converters';
 import { capitalizeFirstLetter } from '~/common/util/textUtils';
 import { conversationTitle, DConversation } from '~/common/stores/chat/chat.conversation';
+import { llmsStoreState } from '~/common/stores/llms/store-llms';
 import { messageFragmentsReduceText } from '~/common/stores/chat/chat.message';
-import { prettyBaseModel } from '~/common/util/modelUtils';
 import { prettyTimestampForFilenames } from '~/common/util/timeUtils';
 import { useChatStore } from '~/common/stores/chat/store-chats';
 import { useFolderStore } from '~/common/state/store-folders';
@@ -125,7 +124,7 @@ export async function downloadAllJsonV1B() {
   const { folders, enableFolders } = useFolderStore.getState();
   const payload = DataAtRestV1.formatAllToJsonV1B(
     useChatStore.getState().conversations,
-    useModelsStore.getState().sources,
+    llmsStoreState().sources,
     folders, enableFolders,
   );
   const json = JSON.stringify(payload);
@@ -136,7 +135,7 @@ export async function downloadAllJsonV1B() {
     fileName: `backup_chats_${window?.location?.hostname || 'all'}_${payload.conversations.length}_${prettyTimestampForFilenames(false)}.agi.json`,
     // mimeTypes: ['application/json', 'application/big-agi'],
     extensions: ['.json'],
-  });
+  }).catch(() => null);
 }
 
 /**
@@ -173,7 +172,7 @@ export async function downloadSingleChat(conversation: DConversation, format: 'j
   await fileSave(blob, {
     fileName: `conversation_${fileTitle}_${prettyTimestampForFilenames(false)}.agi${extension}`,
     extensions: [extension],
-  });
+  }).catch(() => null);
 }
 
 /**
@@ -193,7 +192,7 @@ export function conversationToMarkdown(conversation: DConversation, hideSystemMe
         break;
       case 'assistant':
         const purpose = message.purposeId || conversation.systemPurposeId || null;
-        senderName = `${purpose || 'Assistant'} · *${prettyBaseModel(message.originLLM || '')}*`.trim();
+        senderName = `${purpose || 'Assistant'} · *${prettyShortChatModelName(message.generator?.name || '')}*`.trim();
         if (purpose && purpose in SystemPurposes)
           senderName = `${SystemPurposes[purpose as SystemPurposeId]?.symbol || ''} ${senderName}`.trim();
         break;

@@ -35,13 +35,19 @@ export function aixToOpenAIChatCompletions(openAIDialect: OpenAIDialects, model:
   const hotFixSquashMultiPartText = openAIDialect === 'deepseek';
   const hotFixThrowCannotFC = openAIDialect === 'deepseek' || openAIDialect === 'openrouter' /* OpenRouter FC support is not good (as of 2024-07-15) */ || openAIDialect === 'perplexity';
 
+  // Model incompatibilities -> Hotfixes
+
+  // [OpenAI] - o1 models
+  // - o1 models don't support system messages, we could hotfix this here once and for all, but we want to transfer the responsibility to the UI for better messaging to the user
+  // - o1 models also use the new 'max_completion_tokens' rather than 'max_tokens', breaking API compatibility, so we have to address it here
+  const hotFixOpenAIO1Preview = openAIDialect === 'openai' && model.id.startsWith('o1-'); // OpenAI o1 models don't support system messages
 
   // Throw if function support is needed but missing
   if (chatGenerate.tools?.length && hotFixThrowCannotFC)
     throw new Error('This service does not support function calls');
 
   // Convert the chat messages to the OpenAI 4-Messages format
-  let chatMessages = _toOpenAIMessages(chatGenerate.systemMessage, chatGenerate.chatSequence);
+  let chatMessages = _toOpenAIMessages(chatGenerate.systemMessage, chatGenerate.chatSequence, hotFixOpenAIO1Preview);
 
   // Apply hotfixes
   if (hotFixSquashMultiPartText)
@@ -72,6 +78,9 @@ export function aixToOpenAIChatCompletions(openAIDialect: OpenAIDialects, model:
     stop: undefined,
     user: undefined,
   };
+
+  if (hotFixOpenAIO1Preview)
+    payload = _fixRequestForOpenAIO1Preview(payload);
 
   if (hotFixRemoveStreamOptions)
     payload = _fixRemoveStreamOptions(payload);
@@ -125,6 +134,20 @@ function _fixRemoveEmptyMessages(chatMessages: TRequestMessages): TRequestMessag
   return chatMessages.filter(message => message.content !== null && message.content !== '');
 }
 
+function _fixRequestForOpenAIO1Preview(payload: TRequest): TRequest {
+
+  // Remove temperature and top_p controls
+  const { max_tokens, temperature: _removeTemperature, top_p: _removeTopP, ...rest } = payload;
+
+  // Change max_tokens to max_completion_tokens:
+  // - pre-o1: max_tokens is the output amount
+  // - o1: max_completion_tokens is the output amount + reasoning amount
+  if (max_tokens)
+    rest.max_completion_tokens = max_tokens;
+
+  return rest;
+}
+
 function _fixRemoveStreamOptions(payload: TRequest): TRequest {
   const { stream_options, parallel_tool_calls, ...rest } = payload;
   return rest;
@@ -157,14 +180,17 @@ function _fixSquashMultiPartText(chatMessages: TRequestMessages): TRequestMessag
 }*/
 
 
-function _toOpenAIMessages(systemMessage: AixMessages_SystemMessage | undefined, chatSequence: AixMessages_ChatMessage[]): TRequestMessages {
+function _toOpenAIMessages(systemMessage: AixMessages_SystemMessage | undefined, chatSequence: AixMessages_ChatMessage[], hotFixOpenAIO1Preview: boolean): TRequestMessages {
 
   // Transform the chat messages into OpenAI's format (an array of 'system', 'user', 'assistant', and 'tool' messages)
   const chatMessages: TRequestMessages = [];
 
   // Convert the system message
-  systemMessage?.parts.forEach(({ text }) => {
-    chatMessages.push({ role: 'system', content: text /*, name: _optionalParticipantName */ });
+  systemMessage?.parts.forEach((part) => {
+    if (part.pt === 'meta_cache_control') {
+      // ignore this hint - openai doesn't support this yet
+    } else
+      chatMessages.push({ role: 'system', content: part.text /*, name: _optionalParticipantName */ });
   });
 
   // Convert the messages
@@ -209,8 +235,12 @@ function _toOpenAIMessages(systemMessage: AixMessages_SystemMessage | undefined,
                 chatMessages.push({ role: 'user', content: [imageContentPart] });
               break;
 
+            case 'meta_cache_control':
+              // ignore this hint - openai doesn't support this yet
+              break;
+
             case 'meta_in_reference_to':
-              chatMessages.push({ role: 'system', content: _toOpenAIInReferenceToText(part) });
+              chatMessages.push({ role: hotFixOpenAIO1Preview ? 'user' : 'system', content: _toOpenAIInReferenceToText(part) });
               break;
 
             default:
@@ -275,6 +305,10 @@ function _toOpenAIMessages(systemMessage: AixMessages_SystemMessage | undefined,
                   currentMessage.tool_calls.push(toolCallPart);
               } else
                 chatMessages.push({ role: 'assistant', content: null, tool_calls: [toolCallPart] });
+              break;
+
+            case 'meta_cache_control':
+              // ignore this hint - openai doesn't support this yet
               break;
 
             default:
@@ -370,7 +404,7 @@ function _toOpenAIInReferenceToText(irt: AixParts_MetaInReferenceToPart): string
     return `${index !== undefined ? `ITEM ${index + 1}:\n` : ''}---\n${text}\n---`;
   };
 
-  // Formely: `The user is referring to this in particular:\n{{ReplyToText}}`.replace('{{ReplyToText}}', part.replyTo);
+  // Formerly: `The user is referring to this in particular:\n{{ReplyToText}}`.replace('{{ReplyToText}}', part.replyTo);
   if (items.length === 1)
     return `CONTEXT: The user is referring to this in particular:\n${formatItem(items[0])}`;
 

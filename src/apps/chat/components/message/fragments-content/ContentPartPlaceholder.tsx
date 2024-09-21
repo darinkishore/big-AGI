@@ -21,9 +21,10 @@ export function ContentPartPlaceholder(props: {
       fromRole={props.messageRole}
       contentScaling={props.contentScaling}
       fitScreen={false}
+      isMobile={false /* assumption that the Placeholder Part doesn't react to size, and we assume desktop */}
       showAsDanger={props.showAsDanger}
       showAsItalic={props.showAsItalic}
-      renderTextAsMarkdown={false}
+      textRenderVariant='text'
     />
   );
   //

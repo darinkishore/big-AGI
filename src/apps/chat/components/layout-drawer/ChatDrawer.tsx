@@ -20,8 +20,8 @@ import { DFolder, useFolderStore } from '~/common/state/store-folders';
 import { DebouncedInputMemo } from '~/common/components/DebouncedInput';
 import { FoldersToggleOff } from '~/common/components/icons/FoldersToggleOff';
 import { FoldersToggleOn } from '~/common/components/icons/FoldersToggleOn';
-import { PageDrawerHeader } from '~/common/layout/optima/components/PageDrawerHeader';
-import { PageDrawerList } from '~/common/layout/optima/components/PageDrawerList';
+import { OptimaDrawerHeader } from '~/common/layout/optima/drawer/OptimaDrawerHeader';
+import { OptimaDrawerList } from '~/common/layout/optima/drawer/OptimaDrawerList';
 import { capitalizeFirstLetter } from '~/common/util/textUtils';
 import { getIsMobile } from '~/common/components/useMatchMedia';
 import { optimaCloseDrawer } from '~/common/layout/optima/useOptima';
@@ -65,7 +65,7 @@ function ChatDrawer(props: {
   chatPanesConversationIds: DConversationId[],
   disableNewButton: boolean,
   onConversationActivate: (conversationId: DConversationId) => void,
-  onConversationBranch: (conversationId: DConversationId, messageId: string | null) => void,
+  onConversationBranch: (conversationId: DConversationId, messageId: string | null, addSplitPane: boolean) => void,
   onConversationNew: (forceNoRecycle: boolean) => void,
   onConversationsDelete: (conversationIds: DConversationId[], bypassConfirmation: boolean) => void,
   onConversationsExportDialog: (conversationId: DConversationId | null, exportAll: boolean) => void,
@@ -235,13 +235,13 @@ function ChatDrawer(props: {
   return <>
 
     {/* Drawer Header */}
-    <PageDrawerHeader title='Chats' onClose={optimaCloseDrawer}>
+    <OptimaDrawerHeader title='Chats' onClose={optimaCloseDrawer}>
       <Tooltip title={enableFolders ? 'Hide Folders' : 'Use Folders'}>
         <IconButton size='sm' onClick={toggleEnableFolders}>
           {enableFolders ? <FoldersToggleOn /> : <FoldersToggleOff />}
         </IconButton>
       </Tooltip>
-    </PageDrawerHeader>
+    </OptimaDrawerHeader>
 
     {/* Folders List (shrink at twice the rate as the Titles) */}
     {/*<Box sx={{*/}
@@ -271,7 +271,7 @@ function ChatDrawer(props: {
     {/*</Box>*/}
 
     {/* Chats List */}
-    <PageDrawerList variant='plain' noTopPadding noBottomPadding tallRows>
+    <OptimaDrawerList variant='plain' noTopPadding noBottomPadding tallRows>
 
       {enableFolders && <ListDivider sx={{ mb: 0 }} />}
 
@@ -365,7 +365,7 @@ function ChatDrawer(props: {
       <Box sx={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
         <ListItemButton onClick={props.onConversationsImportDialog} sx={{ flex: 1 }}>
           <ListItemDecorator>
-            <FileUploadOutlinedIcon />
+            <FileDownloadOutlinedIcon />
           </ListItemDecorator>
           Import
           {/*<OpenAIIcon sx={{  ml: 'auto' }} />*/}
@@ -373,7 +373,7 @@ function ChatDrawer(props: {
 
         <ListItemButton disabled={filteredChatsAreEmpty} onClick={handleConversationsExport} sx={{ flex: 1 }}>
           <ListItemDecorator>
-            <FileDownloadOutlinedIcon />
+            <FileUploadOutlinedIcon />
           </ListItemDecorator>
           Export
         </ListItemButton>
@@ -386,7 +386,7 @@ function ChatDrawer(props: {
         Delete {filteredChatsCount >= 2 ? `all ${filteredChatsCount} chats` : 'chat'}
       </ListItemButton>
 
-    </PageDrawerList>
+    </OptimaDrawerList>
 
 
     {/* [Menu] Chat Item Folder Change */}

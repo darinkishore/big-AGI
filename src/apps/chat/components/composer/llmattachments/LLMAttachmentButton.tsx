@@ -15,6 +15,7 @@ import TelegramIcon from '@mui/icons-material/Telegram';
 import TextFieldsIcon from '@mui/icons-material/TextFields';
 import TextureIcon from '@mui/icons-material/Texture';
 import WarningRoundedIcon from '@mui/icons-material/WarningRounded';
+import YouTubeIcon from '@mui/icons-material/YouTube';
 
 import { RenderImageURL } from '~/modules/blocks/image/RenderImageURL';
 
@@ -87,12 +88,15 @@ const converterTypeToIconMap: { [key in AttachmentDraftConverterType]: React.Com
   'image-ocr': AbcIcon,
   'pdf-text': PictureAsPdfIcon,
   'pdf-images': PermMediaOutlinedIcon,
+  'pdf-text-and-images': PermMediaOutlinedIcon,
   'docx-to-html': DescriptionOutlinedIcon,
   'url-page-text': TextFieldsIcon, // was LanguageIcon
   'url-page-markdown': CodeIcon, // was LanguageIcon
   'url-page-html': HtmlIcon, // was LanguageIcon
   'url-page-null': TextureIcon,
   'url-page-image': ImageOutlinedIcon,
+  'youtube-transcript': YouTubeIcon,
+  'youtube-transcript-simple': YouTubeIcon,
   'ego-fragments-inlined': TelegramIcon,
   'unhandled': TextureIcon,
 };
@@ -117,10 +121,10 @@ function attachmentIcons(attachmentDraft: AttachmentDraft): React.ReactNode {
   return <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
 
     {/* If we have a Web preview, show it first */}
-    {!!attachmentDraft.input?.urlImage?.webpDataUrl && /*!imageDataRefs.length &&*/ (
+    {!!attachmentDraft.input?.urlImage?.imgDataUrl && /*!imageDataRefs.length &&*/ (
       // <Tooltip title={<>This was the page.<br />You can also Add the Screenshot as attachment</>}>
       <RenderImageURL
-        imageURL={attachmentDraft.input.urlImage.webpDataUrl}
+        imageURL={attachmentDraft.input.urlImage.imgDataUrl}
         variant='attachment-button'
         scaledImageSx={{ width: 28, height: 28 }}
       />

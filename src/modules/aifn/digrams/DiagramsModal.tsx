@@ -12,7 +12,7 @@ import TelegramIcon from '@mui/icons-material/Telegram';
 import { AutoBlocksRenderer } from '~/modules/blocks/AutoBlocksRenderer';
 import { llmStreamingChatGenerate } from '~/modules/llms/llm.client';
 
-import { GoodModal } from '~/common/components/GoodModal';
+import { GoodModal } from '~/common/components/modals/GoodModal';
 import { InlineError } from '~/common/components/InlineError';
 import { adjustContentScaling } from '~/common/app.theme';
 import { createDMessageTextContent, messageFragmentsReduceText } from '~/common/stores/chat/chat.message';
@@ -147,7 +147,7 @@ export function DiagramsModal(props: { config: DiagramConfig, onClose: () => voi
 
     const diagramMessage = createDMessageTextContent('assistant', diagramCode); // [chat] append assistant:diagram
     // diagramMessage.purposeId = conversation.systemPurposeId;
-    diagramMessage.originLLM = DIAGRAM_ACTOR_PREFIX + (diagramLlmId ? `-${diagramLlmId}` : '');
+    diagramMessage.generator = { mgt: 'named', name: DIAGRAM_ACTOR_PREFIX + (diagramLlmId ? `-${diagramLlmId}` : '') };
 
     useChatStore.getState().appendMessage(conversationId, diagramMessage);
     props.onClose();
@@ -227,9 +227,10 @@ export function DiagramsModal(props: { config: DiagramConfig, onClose: () => voi
             fromRole='assistant'
             contentScaling={adjustContentScaling(contentScaling, -1)}
             fitScreen={isMobile}
-            renderTextAsMarkdown={false}
-            specialCodePlain
-            specialDiagramMode
+            isMobile={isMobile}
+            blocksProcessor='diagram'
+            codeRenderVariant='plain'
+            textRenderVariant='text'
             // Edit is moved from the BlocksRenderer to the ContentPartText
             // onMessageEdit={(text) => setMessage({ ...message, text })}
           />

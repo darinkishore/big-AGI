@@ -7,7 +7,7 @@ import FullscreenRoundedIcon from '@mui/icons-material/FullscreenRounded';
 
 import { BeamStoreApi, useBeamStore } from '~/modules/beam/store-beam.hooks';
 
-import { ConfirmationModal } from '~/common/components/ConfirmationModal';
+import { ConfirmationModal } from '~/common/components/modals/ConfirmationModal';
 import { GoodTooltip } from '~/common/components/GoodTooltip';
 import { KeyStroke } from '~/common/components/KeyStroke';
 import { ShortcutKey, useGlobalShortcuts } from '~/common/components/shortcuts/useGlobalShortcuts';
@@ -16,7 +16,7 @@ import { animationBackgroundBeamGather, animationColorBeamScatterINV, animationE
 
 export function ChatBarAltBeam(props: {
   beamStore: BeamStoreApi,
-  isMobile?: boolean
+  isMobile: boolean,
 }) {
 
   // state
@@ -86,14 +86,14 @@ export function ChatBarAltBeam(props: {
 
         {/* [desktop] maximize button, or a disabled spacer  */}
         {!props.isMobile && (
-          <GoodTooltip usePlain title={<Box sx={{ p: 1 }}>Maximize</Box>}>
+          <GoodTooltip variantOutlined title={<Box sx={{ p: 1 }}>Maximize</Box>}>
             <IconButton size='sm' onClick={handleMaximizeBeam}>
               <FullscreenRoundedIcon />
             </IconButton>
           </GoodTooltip>
         )}
 
-        <GoodTooltip usePlain title={<Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>Back to Chat <KeyStroke combo='Esc' /></Box>}>
+        <GoodTooltip variantOutlined title={<Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>Back to Chat <KeyStroke variant='outlined' combo='Esc' /></Box>}>
           <IconButton aria-label='Close' size='sm' onClick={handleCloseBeam}>
             <CloseRoundedIcon />
           </IconButton>

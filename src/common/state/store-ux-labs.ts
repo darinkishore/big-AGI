@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-import { isDevModeLocalhost } from '~/common/util/pwaUtils';
+import { Is } from '~/common/util/pwaUtils';
 
 
 // UX Labs Experiments
@@ -19,6 +19,12 @@ interface UXLabsStore {
 
   labsChatBarAlt: false | 'title',
   setLabsChatBarAlt: (labsChatBarAlt: false | 'title') => void;
+
+  labsEnhanceCodeBlocks: boolean;
+  setLabsEnhanceCodeBlocks: (labsEnhanceCodeBlocks: boolean) => void;
+
+  labsEnhanceCodeLiveFile: boolean;
+  setLabsEnhanceCodeLiveFile: (labsEnhanceCodeLiveFile: boolean) => void;
 
   labsHighPerformance: boolean;
   setLabsHighPerformance: (labsHighPerformance: boolean) => void;
@@ -51,6 +57,12 @@ export const useUXLabsStore = create<UXLabsStore>()(
 
       labsChatBarAlt: false,
       setLabsChatBarAlt: (labsChatBarAlt: false | 'title') => set({ labsChatBarAlt }),
+
+      labsEnhanceCodeBlocks: true,
+      setLabsEnhanceCodeBlocks: (labsEnhanceCodeBlocks: boolean) => set({ labsEnhanceCodeBlocks }),
+
+      labsEnhanceCodeLiveFile: false,
+      setLabsEnhanceCodeLiveFile: (labsEnhanceCodeLiveFile: boolean) => set({ labsEnhanceCodeLiveFile }),
 
       labsHighPerformance: false,
       setLabsHighPerformance: (labsHighPerformance: boolean) => set({ labsHighPerformance }),
@@ -92,11 +104,11 @@ export function getUXLabsHighPerformance() {
 }
 
 export function useLabsDevMode() {
-  return useUXLabsStore((state) => state.labsDevMode) && isDevModeLocalhost;
+  return useUXLabsStore((state) => state.labsDevMode) && Is.Deployment.Localhost;
 }
 
 export function getLabsDevMode() {
-  return useUXLabsStore.getState().labsDevMode && isDevModeLocalhost;
+  return useUXLabsStore.getState().labsDevMode && Is.Deployment.Localhost;
 }
 
 export function getLabsDevNoStreaming() {

@@ -1,9 +1,9 @@
 import { createStore as createVanillaStore, StateCreator } from 'zustand/vanilla';
 
-import { DLLMId, getDiverseTopLlmIds } from '~/modules/llms/store-llms';
-
+import type { DLLMId } from '~/common/stores/llms/llms.types';
 import type { DMessage, DMessageId } from '~/common/stores/chat/chat.message';
 import type { DMessageFragment, DMessageFragmentId } from '~/common/stores/chat/chat.fragments';
+import { getDiverseTopLlmIds } from '~/common/stores/llms/store-llms';
 
 import { BeamConfigSnapshot, useModuleBeamStore } from './store-module-beam';
 import { SCATTER_RAY_DEF } from './beam.config';
@@ -27,7 +27,7 @@ export const createBeamVanillaStore = () => createVanillaStore<BeamStore>()((...
 
 /// Common Store Slice ///
 
-type BeamSuccessCallback = (fragments: DMessageFragment[], llmId: DLLMId) => void;
+type BeamSuccessCallback = (messageUpdate: Pick<DMessage, 'fragments' | 'generator'>) => void;
 
 interface RootStateSlice {
 

@@ -8,13 +8,13 @@ import WarningRoundedIcon from '@mui/icons-material/WarningRounded';
 import { forgetChatLinkItem, useSharedChatLinkItems } from '~/modules/trade/link/store-link';
 
 import { Brand } from '~/common/app.config';
-import { ConfirmationModal } from '~/common/components/ConfirmationModal';
+import { ConfirmationModal } from '~/common/components/modals/ConfirmationModal';
 import { DataAtRestV1 } from '~/common/stores/chat/chats.converters';
-import { GoodModal } from '~/common/components/GoodModal';
+import { GoodModal } from '~/common/components/modals/GoodModal';
 import { InlineError } from '~/common/components/InlineError';
 import { LogoProgress } from '~/common/components/LogoProgress';
 import { OptimaDrawerIn } from '~/common/layout/optima/portals/OptimaPortalsIn';
-import { addSnackbar } from '~/common/components/useSnackbarsStore';
+import { addSnackbar } from '~/common/components/snackbar/useSnackbarsStore';
 import { apiAsyncNode } from '~/common/util/trpc.client';
 import { capitalizeFirstLetter } from '~/common/util/textUtils';
 import { conversationTitle } from '~/common/stores/chat/chat.conversation';
@@ -22,8 +22,8 @@ import { navigateToChatLinkList } from '~/common/app.routes';
 import { themeBgAppDarker } from '~/common/app.theme';
 import { useSetOptimaAppMenu } from '~/common/layout/optima/useOptima';
 
+import { LinkChatAppMenuItems } from './LinkChatAppMenuItems';
 import { LinkChatDrawer } from './LinkChatDrawer';
-import { LinkChatPageMenuItems } from './LinkChatPageMenuItems';
 import { LinkChatViewer } from './LinkChatViewer';
 
 
@@ -192,12 +192,12 @@ export function AppLinkChat(props: { chatLinkId: string | null }) {
     onDeleteLink={handleConfirmDeletion}
   />, [handleConfirmDeletion, linkId, sharedChatLinkItems]);
 
-  const pageMenuItems = React.useMemo(() => <LinkChatPageMenuItems
+  const appMenuItems = React.useMemo(() => <LinkChatAppMenuItems
     activeLinkId={linkId}
     onDeleteLink={handleConfirmDeletion}
   />, [handleConfirmDeletion, linkId]);
 
-  useSetOptimaAppMenu(pageMenuItems, 'AppChatLink');
+  useSetOptimaAppMenu(appMenuItems, 'AppChatLink');
 
 
   return <>

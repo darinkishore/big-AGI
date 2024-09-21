@@ -1,9 +1,13 @@
 import * as React from 'react';
 
-import { isBrowser, isChromeDesktop, isIPhoneUser } from '~/common/util/pwaUtils';
+import { Is, isBrowser } from '~/common/util/pwaUtils';
 
 import { CapabilityBrowserSpeechRecognition } from './useCapabilities';
 import { useUIPreferencesStore } from '../state/store-ui';
+
+
+// configuration
+export const PLACEHOLDER_INTERIM_TRANSCRIPT = 'Listening...';
 
 
 /// Capability interface
@@ -18,7 +22,7 @@ export const browserSpeechRecognitionCapability = (): CapabilityBrowserSpeechRec
       mayWork: isApiAvailable && !isDeviceNotSupported,
       isApiAvailable,
       isDeviceNotSupported,
-      warnings: isIPhoneUser ? ['Not tested on this browser/device.'] : [],
+      warnings: Is.OS.iOS ? ['Not tested on this browser/device.'] : [],
     };
   }
   return cachedCapability;
@@ -134,7 +138,9 @@ export const useSpeechRecognition = (onResultCallback: SpeechResultCallback, sof
 
     // configure the instance
     _api.lang = preferredLanguageRef.current;
-    _api.interimResults = isChromeDesktop && softStopTimeoutRef.current > 0;
+    _api.interimResults =
+      Is.Desktop // verified on Chrome desktop, and Safari desktop
+      && softStopTimeoutRef.current > 0; // only if we perform the stopping on the client side
     _api.maxAlternatives = 1;
     _api.continuous = true;
 
@@ -179,7 +185,7 @@ export const useSpeechRecognition = (onResultCallback: SpeechResultCallback, sof
       setIsActive(true); // delayed
 
       speechResult.transcript = '';
-      speechResult.interimTranscript = 'Listening...';
+      speechResult.interimTranscript = PLACEHOLDER_INTERIM_TRANSCRIPT;
       speechResult.done = false;
       speechResult.doneReason = undefined;
       onResultCallbackRef.current(speechResult);
@@ -204,14 +210,39 @@ export const useSpeechRecognition = (onResultCallback: SpeechResultCallback, sof
       // recordingDonePromiseResolveRef.current = null;
     };
 
-    _api.onerror = event => {
-      if (event.error === 'no-speech') {
-        speechResult.doneReason = 'api-no-speech';
-      } else {
-        speechResult.doneReason = 'api-error';
-        setErrorMessage('Error occurred during speech recognition.');
-        console.error('Error occurred during speech recognition:', event.error);
+    _api.onerror = (event: any) => {
+      switch (event.error) {
+        case 'no-speech':
+          speechResult.doneReason = 'api-no-speech';
+          return;
+
+        case 'aborted':
+          // the user clicked the stop button, so nothing to really do as the manual done reason is already set
+          // speechResult.doneReason = 'manual';
+          return;
+
+        case 'not-allowed':
+          setErrorMessage('Microphone access blocked by the user. Enable it in your browser settings to use speech recognition.');
+          break;
+
+        case 'service-not-allowed':
+          setErrorMessage('Speech Recognition permission denied. Check your System Settings.');
+          break;
+
+        case 'audio-capture':
+          setErrorMessage(`Audio capture failed (${event.message}). Please try again.`);
+          break;
+
+        case 'network':
+          setErrorMessage('Network communication required to complete the service, but failed.');
+          break;
+
+        default:
+          console.error('Speech recognition error:', event.error, event.message);
+          setErrorMessage(`Browser speech recognition issue ${event.error}: ${event.message}`);
+          break;
       }
+      speechResult.doneReason = 'api-error';
     };
     _api.onresult = (event: ISpeechRecognitionEvent) => {
       if (!event?.results?.length) return;

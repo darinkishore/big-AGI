@@ -4,9 +4,11 @@ import type { SxProps } from '@mui/joy/styles/types';
 import { IconButton, IconButtonProps, styled, Tooltip, TooltipProps } from '@mui/joy';
 
 
+export const BUTTON_RADIUS = '4px'; // note: can't use 'sm', 'md', etc.
+
 export const overlayButtonsClassName = 'overlay-buttons';
 
-export const overlayButtonsSx: SxProps = {
+export const overlayButtonsTopRightSx: SxProps = {
   // stick to the top-right corner
   position: 'absolute',
   top: 0,
@@ -24,7 +26,10 @@ export const overlayButtonsSx: SxProps = {
   // faded-out defaults
   opacity: 'var(--AGI-overlay-start-opacity, 0)',
   pointerEvents: 'none',
-  transition: 'opacity 0.2s cubic-bezier(.17,.84,.44,1)',
+
+  // 2024-08-24: disabled the fading in/out, it's slow
+  // transition: 'opacity 0.1s cubic-bezier(.17,.84,.44,1)',
+
   // buttongroup: background
   // '& > div > button': {
   //   backgroundColor: 'background.surface',
@@ -43,19 +48,30 @@ export const StyledOverlayButton = styled(IconButton)(({ theme, variant }) => ({
   '--Icon-fontSize': theme.fontSize.lg,
 })) as typeof IconButton;
 
+export const overlayButtonShadowSx: SxProps = {
+  boxShadow: '0px 1px 3px -2px var(--joy-palette-background-backdrop)',
+  // boxShadow:'sm',
+};
+
+export const overlayGroupWithShadowSx: SxProps = {
+  ...overlayButtonShadowSx,
+  '--ButtonGroup-radius': BUTTON_RADIUS,
+};
+
 
 // New props interface that combines IconButton and Tooltip props
 interface OverlayButtonWithTooltipProps extends IconButtonProps {
   tooltip?: React.ReactNode;
   placement?: TooltipProps['placement'];
   tooltipProps?: Partial<Omit<TooltipProps, 'children'>>;
+  smShadow?: boolean;
 }
 
-export const OverlayButton = ({ tooltip, placement, tooltipProps, color, variant, ...buttonProps }: OverlayButtonWithTooltipProps) =>
+export const OverlayButton = ({ tooltip, placement, tooltipProps, smShadow, color, variant, ...buttonProps }: OverlayButtonWithTooltipProps) =>
   tooltip ? (
-    <Tooltip disableInteractive placement={placement || 'top'} title={tooltip} color={color} {...tooltipProps}>
-      <StyledOverlayButton color={color} variant={variant || 'outlined'} {...buttonProps} />
+    <Tooltip disableInteractive arrow placement={placement || 'top'} title={tooltip} color={color} {...tooltipProps}>
+      <StyledOverlayButton color={color} variant={variant || 'outlined'} sx={smShadow ? overlayButtonShadowSx : undefined} {...buttonProps} />
     </Tooltip>
   ) : (
-    <StyledOverlayButton color={color} variant={variant || 'outlined'} {...buttonProps} />
+    <StyledOverlayButton color={color} variant={variant || 'outlined'} sx={smShadow ? overlayButtonShadowSx : undefined} {...buttonProps} />
   );

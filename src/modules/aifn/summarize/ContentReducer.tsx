@@ -1,16 +1,16 @@
 import * as React from 'react';
-import { useShallow } from 'zustand/react/shallow';
 
 import { Alert, Box, Button, CircularProgress, Divider, FormControl, Option, Select, Slider, Stack, Textarea, Typography } from '@mui/joy';
 
-import { DLLM, DLLMId, useModelsStore } from '~/modules/llms/store-llms';
+import type { DLLM, DLLMId } from '~/common/stores/llms/llms.types';
 
 import { TokenBadgeMemo } from '../../../apps/chat/components/composer/tokens/TokenBadge';
 
 import { FormLabelStart } from '~/common/components/forms/FormLabelStart';
-import { GoodModal } from '~/common/components/GoodModal';
+import { GoodModal } from '~/common/components/modals/GoodModal';
 import { Section } from '~/common/components/Section';
 import { lineHeightTextareaMd } from '~/common/app.theme';
+import { useDefaultLLMIDs, useNonHiddenLLMs } from '~/common/stores/llms/llms.hooks';
 
 import { summerizeToFitContextBudget } from './summerize';
 
@@ -38,10 +38,8 @@ export function ContentReducer(props: {
 }) {
 
   // external state
-  const { llms, fastLLMId } = useModelsStore(useShallow(state => ({
-    llms: state.llms, // probably relying on the stability of this
-    fastLLMId: state.fastLLMId,
-  })));
+  const llms = useNonHiddenLLMs();
+  const { fastLLMId } = useDefaultLLMIDs();
 
   // state
   const [reducerModelId, setReducerModelId] = React.useState<DLLMId | null>(fastLLMId);

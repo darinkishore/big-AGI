@@ -2,7 +2,10 @@ import * as React from 'react';
 
 import { Badge } from '@mui/joy';
 
-import { formatTokenCost, tokenCountsMathAndMessage, TokenTooltip } from './TokenTooltip';
+import type { DChatGeneratePricing } from '~/common/stores/llms/llms.pricing';
+import { formatModelsCost } from '~/common/util/costUtils';
+
+import { tokenCountsMathAndMessage, TokenTooltip } from './TokenTooltip';
 
 
 /**
@@ -11,13 +14,12 @@ import { formatTokenCost, tokenCountsMathAndMessage, TokenTooltip } from './Toke
 export const TokenBadgeMemo = React.memo(TokenBadge);
 
 function TokenBadge(props: {
+  chatPricing?: DChatGeneratePricing,
+
   direct: number,
   history?: number,
   responseMax?: number,
   limit: number,
-
-  tokenPriceIn?: number,
-  tokenPriceOut?: number,
 
   enableHover?: boolean,
   showCost?: boolean
@@ -30,7 +32,7 @@ function TokenBadge(props: {
   const [isHovering, setIsHovering] = React.useState(false);
 
   const { message, color, remainingTokens, costMax, costMin } =
-    tokenCountsMathAndMessage(props.limit, props.direct, props.history, props.responseMax, props.tokenPriceIn, props.tokenPriceOut);
+    tokenCountsMathAndMessage(props.limit, props.direct, props.history, props.responseMax, props.chatPricing);
 
 
   // handlers
@@ -43,9 +45,10 @@ function TokenBadge(props: {
 
   const showAltCosts = !!props.showCost && !!costMax && costMin !== undefined;
   if (showAltCosts) {
-    badgeValue = (!props.enableHover || isHovering)
-      ? '< ' + formatTokenCost(costMax)
-      : '> ' + formatTokenCost(costMin);
+    // Note: switched to 'min cost (>= ...)' on mobile as well, to restore the former behavior, just uncomment the !props.enableHover (a proxy for isMobile)
+    badgeValue = (/*!props.enableHover ||*/ isHovering)
+      ? '< ' + formatModelsCost(costMax)
+      : '> ' + formatModelsCost(costMin);
   } else {
 
     // show the direct tokens, unless we exceed the limit and 'showExcess' is enabled

@@ -7,8 +7,10 @@ import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 
 // import { isMacUser } from '~/common/util/pwaUtils';
 import type { ShortcutObject } from '~/common/components/shortcuts/useGlobalShortcuts';
+import { ConfirmationModal } from '~/common/components/modals/ConfirmationModal';
 import { GoodTooltip } from '~/common/components/GoodTooltip';
 import { useGlobalShortcutsStore } from '~/common/components/shortcuts/store-global-shortcuts';
+import { useOverlayComponents } from '~/common/layout/overlays/useOverlayComponents';
 import { useUXLabsStore } from '~/common/state/store-ux-labs';
 
 
@@ -112,7 +114,7 @@ function ShortcutItem(props: { shortcut: ShortcutObject }) {
       {!!props.shortcut.ctrl && <ShortcutKey onClick={handleClicked}>{_platformAwareModifier('Ctrl')}</ShortcutKey>}
       {!!props.shortcut.shift && <ShortcutKey onClick={handleClicked}>{_platformAwareModifier('Shift')}</ShortcutKey>}
       {/*{!!props.shortcut.altForNonMac && <ShortcutKey onClick={handleClicked}>{_platformAwareModifier('Alt')}</ShortcutKey>}*/}
-      <ShortcutKey onClick={handleClicked}>{props.shortcut.key === 'Escape' ? 'Esc' : props.shortcut.key.toUpperCase()}</ShortcutKey>
+      <ShortcutKey onClick={handleClicked}>{props.shortcut.key === 'Escape' ? 'Esc' : props.shortcut.key === 'Enter' ? '↵' : props.shortcut.key.toUpperCase()}</ShortcutKey>
       &nbsp;<Typography level='body-xs'>{props.shortcut.description}</Typography>
       {props.shortcut.endDecoratorIcon && <props.shortcut.endDecoratorIcon sx={{ fontSize: 'md' }} />}
     </ShortcutContainer>
@@ -123,6 +125,7 @@ function ShortcutItem(props: { shortcut: ShortcutObject }) {
 export function StatusBar() {
 
   // state (modifiers pressed/not)
+  const { showPromisedOverlay } = useOverlayComponents();
   // const [ctrlPressed, setCtrlPressed] = React.useState(false);
   // const [shiftPressed, setShiftPressed] = React.useState(false);
 
@@ -146,9 +149,19 @@ export function StatusBar() {
   }));
 
   // handlers
-  const handleHideShortcuts = React.useCallback(() => {
-    useUXLabsStore.getState().setLabsShowShortcutBar(false);
-  }, []);
+  const handleHideShortcuts = React.useCallback((event: React.MouseEvent) => {
+    if (event.shiftKey) {
+      console.log('shortcutGroups', useGlobalShortcutsStore.getState().shortcutGroups);
+      return;
+    }
+    showPromisedOverlay('shortcuts-confirm-close', {}, ({ onResolve, onUserReject }) =>
+      <ConfirmationModal
+        open onClose={onUserReject} onPositive={() => onResolve(true)}
+        confirmationText='Remove productivity tips and shortcuts? You can add it back in Settings > Labs.'
+        positiveActionText='Remove'
+      />,
+    ).then(() => useUXLabsStore.getState().setLabsShowShortcutBar(false)).catch(() => null /* ignore closure */);
+  }, [showPromisedOverlay]);
 
   // React to modifiers
   // React.useEffect(() => {
@@ -175,7 +188,7 @@ export function StatusBar() {
     <StatusBarContainer aria-label='Status bar'>
 
       {/* Close Button */}
-      <GoodTooltip usePlain arrow placement='top' title={hideButtonTooltip}>
+      <GoodTooltip variantOutlined arrow placement='top' title={hideButtonTooltip}>
         <IconButton size='sm' sx={hideButtonSx} onClick={handleHideShortcuts}>
           <CloseRoundedIcon />
         </IconButton>

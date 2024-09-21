@@ -14,9 +14,20 @@ export function aixToGeminiGenerateContent(model: AixAPI_Model, chatGenerate: Ai
   // Note: the streaming setting is ignored as it only belongs in the path
 
   // System Instructions
-  const systemInstruction: TRequest['systemInstruction'] = chatGenerate.systemMessage?.parts.length
-    ? { parts: chatGenerate.systemMessage.parts.map(part => GeminiWire_ContentParts.TextPart(part.text)) }
-    : undefined;
+  let systemInstruction: TRequest['systemInstruction'] = undefined;
+  if (chatGenerate.systemMessage?.parts.length) {
+    systemInstruction = chatGenerate.systemMessage.parts.reduce((acc, part) => {
+      switch (part.pt) {
+        case 'meta_cache_control':
+          // ignore - we implement caching in the Anthropic way for now
+          break;
+        case 'text':
+          acc.parts.push(GeminiWire_ContentParts.TextPart(part.text));
+          break;
+      }
+      return acc;
+    }, { parts: [] } as Exclude<TRequest['systemInstruction'], undefined>);
+  }
 
   // Chat Messages
   const contents: TRequest['contents'] = _toGeminiContents(chatGenerate.chatSequence);
@@ -92,6 +103,10 @@ function _toGeminiContents(chatSequence: AixMessages_ChatMessage[]): GeminiWire_
           parts.push(_toApproximateGeminiDocPart(part));
           break;
 
+        case 'meta_cache_control':
+          // ignore - we implement caching in the Anthropic way for now
+          break;
+
         case 'meta_in_reference_to':
           const irtXMLString = inReferenceTo_To_XMLString(part);
           if (irtXMLString)
@@ -154,12 +169,12 @@ function _toGeminiContents(chatSequence: AixMessages_ChatMessage[]): GeminiWire_
               parts.push(GeminiWire_ContentParts.CodeExecutionResultPart(!part.error ? 'OUTCOME_OK' : 'OUTCOME_FAILED', toolErrorPrefix + part.response.result));
               break;
             default:
-              throw new Error(`Unsupported part type in message: ${(part as any).pt}`);
+              throw new Error(`Unsupported tool response type in message: ${(part as any).response.type}`);
           }
           break;
 
         default:
-          throw new Error(`Unsupported part type in message: ${(part as any).pt}`);
+          throw new Error(`Unsupported part type in Chat message: ${(part as any).pt}`);
       }
     }
 

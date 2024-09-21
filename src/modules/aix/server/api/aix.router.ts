@@ -4,7 +4,7 @@ import { createEmptyReadableStream, createServerDebugWireEvents, safeErrorString
 import { createTRPCRouter, publicProcedure } from '~/server/api/trpc.server';
 import { fetchResponseOrTRPCThrow } from '~/server/api/trpc.router.fetchers';
 
-import { AixWire_API, AixWire_API_ChatGenerate, AixWire_Particles } from './aix.wiretypes';
+import { AixWire_API, AixWire_API_ChatContentGenerate, AixWire_Particles } from './aix.wiretypes';
 import { ChatGenerateTransmitter } from '../dispatch/chatGenerate/ChatGenerateTransmitter';
 import { createChatGenerateDispatch } from '../dispatch/chatGenerate/chatGenerate.dispatch';
 import { createStreamDemuxer } from '../dispatch/stream.demuxers';
@@ -20,7 +20,7 @@ export const aixRouter = createTRPCRouter({
     .input(z.object({
       access: AixWire_API.Access_schema,
       model: AixWire_API.Model_schema,
-      chatGenerate: AixWire_API_ChatGenerate.Request_schema,
+      chatGenerate: AixWire_API_ChatContentGenerate.Request_schema,
       context: AixWire_API.Context_schema,
       streaming: z.boolean(),
       connectionOptions: AixWire_API.ConnectionOptions_schema.optional(),
@@ -71,6 +71,12 @@ export const aixRouter = createTRPCRouter({
         });
 
       } catch (error: any) {
+        // Handle expected dispatch abortion while the first fetch hasn't even completed
+        if (error && error?.name === 'TRPCError' && intakeAbortSignal.aborted) {
+          chatGenerateTx.setEnded('done-dispatch-aborted');
+          yield* chatGenerateTx.flushParticles();
+          return; // exit
+        }
 
         // Handle AI Service connection error
         const dispatchFetchError = safeErrorString(error) + (error?.cause ? ' · ' + JSON.stringify(error.cause) : '');

@@ -181,7 +181,7 @@ export const createAttachmentDraftsStoreSlice: StateCreator<AttachmentsDraftsSto
     const transferredFragments: DMessageAttachmentFragment[] =
       _get().attachmentDrafts.flatMap(draft => draft.outputFragments);
 
-    // transfer ownership (await for transferAttachmentOwnedDBAsset)
+    // [dblob] transfer ownership (await for transferAttachmentOwnedDBAsset)
     for (const transferredFragment of transferredFragments)
       await transferAttachmentOwnedDBAsset(transferredFragment, newContextId, newScopeId);
 

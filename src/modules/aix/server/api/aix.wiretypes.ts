@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-// Used to align Partlces to the Typescript definitions from the frontend-side, on 'chat.fragments.ts'
-import { DMessageToolResponsePart } from '~/common/stores/chat/chat.fragments';
+// Used to align Particles to the Typescript definitions from the frontend-side, on 'chat.fragments.ts'
+import type { DMessageToolResponsePart } from '~/common/stores/chat/chat.fragments';
 
 import { anthropicAccessSchema } from '~/modules/llms/server/anthropic/anthropic.router';
 import { geminiAccessSchema } from '~/modules/llms/server/gemini/gemini.router';
@@ -19,6 +19,7 @@ import { openAIAccessSchema } from '~/modules/llms/server/openai/openai.router';
 // Export types
 export type AixParts_DocPart = z.infer<typeof AixWire_Parts.DocPart_schema>;
 export type AixParts_InlineImagePart = z.infer<typeof AixWire_Parts.InlineImagePart_schema>;
+export type AixParts_MetaCacheControl = z.infer<typeof AixWire_Parts.MetaCacheControl_schema>;
 export type AixParts_MetaInReferenceToPart = z.infer<typeof AixWire_Parts.MetaInReferenceToPart_schema>;
 
 export type AixMessages_SystemMessage = z.infer<typeof AixWire_Content.SystemInstruction_schema>;
@@ -31,9 +32,11 @@ export type AixTools_FunctionCallDefinition = Extract<z.infer<typeof AixWire_Too
 export type AixTools_ToolsPolicy = z.infer<typeof AixWire_Tooling.ToolsPolicy_schema>;
 
 export type AixAPI_Access = z.infer<typeof AixWire_API.Access_schema>;
-export type AixAPI_ContextChatStream = z.infer<typeof AixWire_API.ContextChatStream_schema>;
+export type AixAPI_Context = z.infer<typeof AixWire_API.Context_schema>;
+export type AixAPI_Context_ChatGenerateNS = z.infer<typeof AixWire_API.ContextChatGenerateNS_schema>;
+export type AixAPI_Context_ChatGenerateStream = z.infer<typeof AixWire_API.ContextChatGenerateStream_schema>;
 export type AixAPI_Model = z.infer<typeof AixWire_API.Model_schema>;
-export type AixAPIChatGenerate_Request = z.infer<typeof AixWire_API_ChatGenerate.Request_schema>;
+export type AixAPIChatGenerate_Request = z.infer<typeof AixWire_API_ChatContentGenerate.Request_schema>;
 
 
 /// Input Types to AIX
@@ -196,6 +199,11 @@ export namespace AixWire_Parts {
 
   // Metas
 
+  export const MetaCacheControl_schema = z.object({
+    pt: z.literal('meta_cache_control'),
+    control: z.literal('anthropic-ephemeral'),
+  });
+
   export const MetaInReferenceToPart_schema = z.object({
     pt: z.literal('meta_in_reference_to'),
     referTo: z.array(z.object({
@@ -212,7 +220,10 @@ export namespace AixWire_Content {
   /// System Message
 
   export const SystemInstruction_schema = z.object({
-    parts: z.array(AixWire_Parts.TextPart_schema),
+    parts: z.array(z.discriminatedUnion('pt', [
+      AixWire_Parts.TextPart_schema,
+      AixWire_Parts.MetaCacheControl_schema,
+    ])),
   });
 
   /// Chat Message
@@ -223,6 +234,7 @@ export namespace AixWire_Content {
       AixWire_Parts.TextPart_schema,
       AixWire_Parts.InlineImagePart_schema,
       AixWire_Parts.DocPart_schema,
+      AixWire_Parts.MetaCacheControl_schema,
       AixWire_Parts.MetaInReferenceToPart_schema,
     ])),
   });
@@ -233,6 +245,7 @@ export namespace AixWire_Content {
       AixWire_Parts.TextPart_schema,
       AixWire_Parts.InlineImagePart_schema,
       AixWire_Parts.ToolInvocationPart_schema,
+      AixWire_Parts.MetaCacheControl_schema,
     ])),
   });
 
@@ -363,14 +376,21 @@ export namespace AixWire_API {
 
   /// Context
 
-  export const ContextChatStream_schema = z.object({
+  export const ContextChatGenerateNS_schema = z.object({
+    method: z.literal('chat-generate'),
+    name: z.enum(['chat-ai-title', 'chat-ai-summarize', 'chat-followup-diagram', 'chat-followup-htmlui', 'chat-react-turn', 'draw-expand-prompt']),
+    ref: z.string(),
+  });
+
+  export const ContextChatGenerateStream_schema = z.object({
     method: z.literal('chat-stream'),
     name: z.enum(['DEV', 'conversation', 'ai-diagram', 'ai-flattener', 'call', 'beam-scatter', 'beam-gather', 'persona-extract']),
     ref: z.string(),
   });
 
   export const Context_schema = z.discriminatedUnion('method', [
-    ContextChatStream_schema,
+    ContextChatGenerateNS_schema,
+    ContextChatGenerateStream_schema,
   ]);
 
   /// Connection options
@@ -384,7 +404,7 @@ export namespace AixWire_API {
 
 }
 
-export namespace AixWire_API_ChatGenerate {
+export namespace AixWire_API_ChatContentGenerate {
 
   /// Request
 
@@ -439,8 +459,8 @@ export namespace AixWire_Particles {
   // | { cg: 'start' } // not really used for now
     | { cg: 'end', reason: CGEndReason, tokenStopReason: GCTokenStopReason }
     | { cg: 'issue', issueId: CGIssueId, issueText: string }
+    | { cg: 'set-metrics', metrics: CGSelectMetrics }
     | { cg: 'set-model', name: string }
-    | { cg: 'update-counts', counts: Partial<ChatGenerateCounts> }
     | { cg: '_debugRequest', security: 'dev-env', request: { url: string, headers: string, body: string } }; // may generalize this in the future
 
   export type CGEndReason =     // the reason for the end of the chat generation
@@ -469,15 +489,29 @@ export namespace AixWire_Particles {
     | 'filter-recitation'       // recitation filter (e.g. recitation)
     | 'out-of-tokens';          // got out of tokens
 
-  export type ChatGenerateCounts = {
-    chatIn?: number,
-    chatOut?: number,
-    chatOutRate?: number,
-    chatTimeStart?: number,
-    chatTimeInner?: number,
-    chatTimeTotal?: number,
-  };
+  /**
+   * NOTE: break compatbility with this D-stored-type only when we'll
+   * start to need backwards-incompatible Particle->Reassembler flexibility,
+   * which can't be just extended in the D-stored-type.
+   *
+   * We are now duplicating this, to force the type checker to reveal any discrepancies.
+   */
+  export type CGSelectMetrics = {
+    // T = milliseconds
+    TIn?: number,
+    TCacheRead?: number,
+    TCacheWrite?: number,
+    TOut?: number,
+    TOutR?: number,
 
+    // dt = milliseconds
+    dtStart?: number,
+    dtInner?: number,
+    dtAll?: number,
+
+    // v = Tokens/s
+    vTOutInner?: number,  // TOut / dtInner
+  };
 
   // TextParticle / PartParticle - keep in line with the DMessage*Part counterparts
 
