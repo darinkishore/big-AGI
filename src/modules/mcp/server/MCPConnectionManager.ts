@@ -5,6 +5,9 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
+import { appEvents } from '~/common/events/appEvents';
+import '~/modules/mcp/events.mcp'; // Import for type augmentation
+
 import type {
   MCPRequest,
   MCPResponse,
@@ -90,10 +93,22 @@ export class MCPConnectionManager extends EventEmitter {
           const resolvedPath = stdout.trim();
           if (resolvedPath) {
             console.log(`[MCP] Resolved ${command} to: ${resolvedPath}`);
+            appEvents.emit('mcp', 'serverLog', {
+              serverId,
+              level: 'info',
+              message: `Resolved ${command} to: ${resolvedPath}`,
+              source: 'internal'
+            });
             command = resolvedPath;
           }
         } catch (e) {
           console.log(`[MCP] Could not resolve path for ${command}, using as-is`);
+          appEvents.emit('mcp', 'serverLog', {
+            serverId,
+            level: 'info',
+            message: `Could not resolve path for ${command}, using as-is`,
+            source: 'internal'
+          });
         }
       }
 
@@ -102,6 +117,13 @@ export class MCPConnectionManager extends EventEmitter {
         command,
         args: config.args,
         env: Object.keys(config.env || {}),
+      });
+      appEvents.emit('mcp', 'serverLog', {
+        serverId,
+        level: 'info',
+        message: `Spawning server: ${command}`,
+        details: { command, args: config.args },
+        source: 'internal'
       });
 
       const env = { ...process.env, ...config.env };
@@ -113,6 +135,12 @@ export class MCPConnectionManager extends EventEmitter {
 
       connection.process = child;
       console.log(`[MCP] Process spawned with PID: ${child.pid}`);
+      appEvents.emit('mcp', 'serverLog', {
+        serverId,
+        level: 'info',
+        message: `Process spawned with PID: ${child.pid}`,
+        source: 'internal'
+      });
 
       // Set up stdio handlers
       this.setupStdioHandlers(serverId, child);
@@ -161,11 +189,21 @@ export class MCPConnectionManager extends EventEmitter {
       }
 
       this.emit('connected', serverId, connection);
+      appEvents.emit('mcp', 'serverConnected', {
+        serverId,
+        serverInfo: connection.serverInfo,
+        capabilities: connection.capabilities
+      });
       return connection;
     } catch (error) {
       connection.status = 'error';
       connection.error = error instanceof Error ? error.message : 'Unknown error';
       this.emit('error', serverId, error);
+      appEvents.emit('mcp', 'serverError', {
+        serverId,
+        error: connection.error,
+        fatal: true
+      });
       throw error;
     }
   }
@@ -253,14 +291,31 @@ export class MCPConnectionManager extends EventEmitter {
 
     // Handle stderr (logging)
     child.stderr?.on('data', (data: Buffer) => {
-      const message = data.toString();
+      const message = data.toString().trim();
       console.error(`[MCP] Server ${serverId} stderr:`, message);
+      
+      // Determine log level based on content
+      let level: 'info' | 'warn' | 'error' = 'info';
+      if (message.toLowerCase().includes('error') || message.toLowerCase().includes('failed')) {
+        level = 'error';
+      } else if (message.toLowerCase().includes('warn') || message.toLowerCase().includes('warning')) {
+        level = 'warn';
+      }
       
       // Check for the specific error we're debugging
       if (message.includes('command not found') && message.includes('jsonrpc')) {
         console.error(`[MCP] CRITICAL: JSON-RPC being interpreted as shell command!`);
         console.error(`[MCP] This indicates stdin is not properly connected to the MCP server.`);
+        level = 'error';
       }
+      
+      // Emit log event
+      appEvents.emit('mcp', 'serverLog', {
+        serverId,
+        level,
+        message,
+        source: 'stderr'
+      });
     });
 
     // Handle process exit
@@ -270,6 +325,12 @@ export class MCPConnectionManager extends EventEmitter {
         connection.status = 'disconnected';
         connection.error = `Process exited with code ${code} and signal ${signal}`;
       }
+      appEvents.emit('mcp', 'serverDisconnected', {
+        serverId,
+        reason: `Process exited with code ${code} and signal ${signal}`,
+        exitCode: code,
+        signal
+      });
       this.disconnect(serverId);
     });
 
@@ -280,6 +341,11 @@ export class MCPConnectionManager extends EventEmitter {
         connection.error = error.message;
       }
       this.emit('error', serverId, error);
+      appEvents.emit('mcp', 'serverError', {
+        serverId,
+        error: error.message,
+        code: (error as any).code
+      });
     });
   }
 
@@ -330,9 +396,21 @@ export class MCPConnectionManager extends EventEmitter {
       try {
         const message = JSON.stringify(request) + '\n';
         console.log(`[MCP] Sending request to ${serverId}:`, { method, id, hasParams: !!params });
+        appEvents.emit('mcp', 'requestSent', {
+          serverId,
+          requestId: id,
+          method
+        });
         connection.process!.stdin!.write(message);
       } catch (error) {
         console.error(`[MCP] Failed to write to stdin for ${serverId}:`, error);
+        appEvents.emit('mcp', 'serverLog', {
+          serverId,
+          level: 'error',
+          message: `Failed to write to stdin: ${error}`,
+          details: { method, error },
+          source: 'internal'
+        });
         pendingMap.delete(id);
         clearTimeout(timer);
         reject(error);
@@ -360,6 +438,12 @@ export class MCPConnectionManager extends EventEmitter {
     for (const [serverId, connection] of this.connections) {
       if (connection.status === 'connected' && now - connection.lastActivity > this.IDLE_TIMEOUT) {
         console.log(`Disconnecting idle MCP server: ${serverId}`);
+        appEvents.emit('mcp', 'serverLog', {
+          serverId,
+          level: 'info',
+          message: 'Disconnecting idle server',
+          source: 'internal'
+        });
         this.disconnect(serverId);
       }
     }

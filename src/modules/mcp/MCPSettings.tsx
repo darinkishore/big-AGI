@@ -11,9 +11,13 @@ import { Link } from '~/common/components/Link';
 
 import { useMCPStore } from './store-module-mcp';
 import { useMCPServerPresets, useValidateMCPServer } from './mcp.client';
+import { useMCPLogBridge } from './hooks/useMCPLogBridge';
 import type { MCPServerConfig } from './types/mcp.types';
 
 export function MCPSettings() {
+  // Install the MCP log bridge to forward server logs to the UI
+  useMCPLogBridge();
+  
   const { servers, addServer, updateServer, removeServer, connectServer, disconnectServer, connections, availableTools } = useMCPStore();
   const { data: presets } = useMCPServerPresets();
   const validateMutation = useValidateMCPServer();

@@ -40,6 +40,7 @@ export type LogSource =
   | 'unhandled' // uncaught exceptions
   | 'client'    // includes uncaught exceptions
   | 'network'   // network errors - includes the automatic fetch interceptor
+  | 'mcp-server' // MCP server logs from MCPConnectionManager
 // add new sources here as we continue using this system
 // | 'server'
 // | 'storage'
