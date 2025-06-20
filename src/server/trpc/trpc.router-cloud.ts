@@ -1,6 +1,7 @@
 import { createTRPCRouter } from './trpc.server';
 
 import { browseRouter } from '~/modules/browse/browse.router';
+import { mcpRouter } from '~/modules/mcp/mcp.router';
 import { tradeRouter } from '~/modules/trade/server/trade.router';
 
 /**
@@ -9,6 +10,7 @@ import { tradeRouter } from '~/modules/trade/server/trade.router';
  */
 export const appRouterCloud = createTRPCRouter({
   browse: browseRouter,
+  mcp: mcpRouter,
   trade: tradeRouter,
 });
 
