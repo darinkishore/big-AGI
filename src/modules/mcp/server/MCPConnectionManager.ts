@@ -1,6 +1,10 @@
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, ChildProcess, exec } from 'child_process';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
+
 import type {
   MCPRequest,
   MCPResponse,
@@ -78,14 +82,37 @@ export class MCPConnectionManager extends EventEmitter {
     this.pendingRequests.set(serverId, new Map());
 
     try {
+      // Resolve full path for common commands
+      let command = config.command;
+      if (command === 'npx' || command === 'node' || command === 'npm') {
+        try {
+          const { stdout } = await execAsync(`which ${command}`);
+          const resolvedPath = stdout.trim();
+          if (resolvedPath) {
+            console.log(`[MCP] Resolved ${command} to: ${resolvedPath}`);
+            command = resolvedPath;
+          }
+        } catch (e) {
+          console.log(`[MCP] Could not resolve path for ${command}, using as-is`);
+        }
+      }
+
       // Spawn the MCP server process
+      console.log(`[MCP] Spawning server ${serverId}:`, {
+        command,
+        args: config.args,
+        env: Object.keys(config.env || {}),
+      });
+
       const env = { ...process.env, ...config.env };
-      const child = spawn(config.command, config.args || [], {
+      const child = spawn(command, config.args || [], {
         env,
         stdio: ['pipe', 'pipe', 'pipe'],
+        shell: false, // Critical: prevent shell interpretation of stdin
       });
 
       connection.process = child;
+      console.log(`[MCP] Process spawned with PID: ${child.pid}`);
 
       // Set up stdio handlers
       this.setupStdioHandlers(serverId, child);
@@ -226,7 +253,14 @@ export class MCPConnectionManager extends EventEmitter {
 
     // Handle stderr (logging)
     child.stderr?.on('data', (data: Buffer) => {
-      console.error(`MCP server ${serverId} stderr:`, data.toString());
+      const message = data.toString();
+      console.error(`[MCP] Server ${serverId} stderr:`, message);
+      
+      // Check for the specific error we're debugging
+      if (message.includes('command not found') && message.includes('jsonrpc')) {
+        console.error(`[MCP] CRITICAL: JSON-RPC being interpreted as shell command!`);
+        console.error(`[MCP] This indicates stdin is not properly connected to the MCP server.`);
+      }
     });
 
     // Handle process exit
@@ -294,8 +328,11 @@ export class MCPConnectionManager extends EventEmitter {
       pendingMap.set(id, { resolve, reject, timer });
 
       try {
-        connection.process!.stdin!.write(JSON.stringify(request) + '\n');
+        const message = JSON.stringify(request) + '\n';
+        console.log(`[MCP] Sending request to ${serverId}:`, { method, id, hasParams: !!params });
+        connection.process!.stdin!.write(message);
       } catch (error) {
+        console.error(`[MCP] Failed to write to stdin for ${serverId}:`, error);
         pendingMap.delete(id);
         clearTimeout(timer);
         reject(error);

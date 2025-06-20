@@ -1,6 +1,9 @@
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, ChildProcess, exec } from 'child_process';
+import { promisify } from 'util';
 import { MCPClient } from './MCPClient';
 import type { MCPNotification, MCPRequest, MCPResponse, MCPServerConfig } from '../types/mcp.types';
+
+const execAsync = promisify(exec);
 
 export class MCPStdioClient extends MCPClient {
   private process: ChildProcess | null = null;
@@ -13,10 +16,25 @@ export class MCPStdioClient extends MCPClient {
 
     const config = this.getConfig();
     
+    // Resolve full path for common commands
+    let command = config.command;
+    if (command === 'npx' || command === 'node' || command === 'npm') {
+      try {
+        const { stdout } = await execAsync(`which ${command}`);
+        const resolvedPath = stdout.trim();
+        if (resolvedPath) {
+          command = resolvedPath;
+        }
+      } catch (e) {
+        // Ignore, use command as-is
+      }
+    }
+    
     // Spawn the MCP server process
-    this.process = spawn(config.command, config.args || [], {
+    this.process = spawn(command, config.args || [], {
       env: { ...process.env, ...config.env },
       stdio: ['pipe', 'pipe', 'pipe'],
+      shell: false, // Prevent shell interpretation of stdin
     });
 
     // Handle stdout (responses from server)
