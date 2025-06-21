@@ -5,7 +5,7 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
-import { appEvents } from '~/common/events/appEvents';
+import { appEvents } from '~/common/events';
 import '~/modules/mcp/events.mcp'; // Import for type augmentation
 
 import type {

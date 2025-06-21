@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-import { appEvents } from '~/common/events/appEvents';
+import { appEvents } from '~/common/events';
 import { logger } from '~/common/logger/logger.client';
 
 /**
