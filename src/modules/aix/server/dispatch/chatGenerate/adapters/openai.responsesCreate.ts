@@ -1,18 +1,26 @@
-import { AixAPI_Model, AixAPIChatGenerate_Request, AixMessages_ChatMessage, AixMessages_SystemMessage, AixTools_ToolDefinition, AixTools_ToolsPolicy } from '../../../api/aix.wiretypes';
+import {
+  AixAPI_Model,
+  AixAPIChatGenerate_Request,
+  AixMessages_ChatMessage,
+  AixMessages_SystemMessage,
+  AixTools_ToolDefinition,
+  AixTools_ToolsPolicy,
+} from '../../../api/aix.wiretypes';
 import { OpenAIWire_API_Responses, OpenAIWire_Responses_Items, OpenAIWire_Responses_Tools } from '../../wiretypes/openai.wiretypes';
 
 import { approxDocPart_To_String } from './anthropic.messageCreate';
-import { aixDocPart_to_OpenAITextContent, aixMetaRef_to_OpenAIText, aixTexts_to_OpenAIInstructionText } from '~/modules/aix/server/dispatch/chatGenerate/adapters/openai.chatCompletions';
-
+import {
+  aixDocPart_to_OpenAITextContent,
+  aixMetaRef_to_OpenAIText,
+  aixTexts_to_OpenAIInstructionText,
+} from '~/modules/aix/server/dispatch/chatGenerate/adapters/openai.chatCompletions';
 
 // configuration
 const OPENAI_RESPONSES_DEFAULT_TRUNCATION: TRequest['truncation'] = undefined;
 
-
 type TRequest = OpenAIWire_API_Responses.Request;
 type TRequestInput = OpenAIWire_Responses_Items.InputItem;
 type TRequestTool = OpenAIWire_Responses_Tools.Tool;
-
 
 /**
  * OpenAI Responses request adapter
@@ -22,9 +30,8 @@ type TRequestTool = OpenAIWire_Responses_Tools.Tool;
  * - testing with o3-pro only for now
  */
 export function aixToOpenAIResponses(model: AixAPI_Model, chatGenerate: AixAPIChatGenerate_Request, jsonOutput: boolean, streaming: boolean): TRequest {
-
   // [OpenAI] Vendor-specific model checks
-  const isOpenAIOFamily = ['o1', 'o3', 'o4', 'o5'].some(m => model.id === m || model.id.startsWith(m + '-'));
+  const isOpenAIOFamily = ['o1', 'o3', 'o4', 'o5'].some((m) => model.id === m || model.id.startsWith(m + '-'));
   const isOpenAIComputerUse = model.id.includes('computer-use');
   const isOpenAIO1Pro = model.id === 'o1-pro' || model.id.startsWith('o1-pro-');
   const isOpenAIDeepResearch = model.id.includes('-deep-research');
@@ -40,11 +47,10 @@ export function aixToOpenAIResponses(model: AixAPI_Model, chatGenerate: AixAPICh
 
   const { requestInput, requestInstructions } = _toOpenAIResponsesRequestInput(chatGenerate.systemMessage, chatGenerate.chatSequence);
   const payload: TRequest = {
-
     // Model configuration
     model: model.id,
     max_output_tokens: model.maxTokens ?? undefined, // response if unset: null
-    temperature: !hotFixNoTemperature ? model.temperature ?? undefined : undefined,
+    temperature: !hotFixNoTemperature ? (model.temperature ?? undefined) : undefined,
     // top_p: ... below (alternative to temperature)
 
     // Input
@@ -57,10 +63,12 @@ export function aixToOpenAIResponses(model: AixAPI_Model, chatGenerate: AixAPICh
     // parallel_tool_calls: undefined, // response if unset: true
 
     // Operations Config
-    reasoning: !model.vndOaiReasoningEffort ? undefined : {
-      effort: model.vndOaiReasoningEffort,
-      summary: !isOpenAIO1Pro ? 'detailed' : 'auto', // elevated from 'auto' (o1-pro still at 'auto')
-    },
+    reasoning: !model.vndOaiReasoningEffort
+      ? undefined
+      : {
+          effort: model.vndOaiReasoningEffort,
+          summary: !isOpenAIO1Pro ? 'detailed' : 'auto', // elevated from 'auto' (o1-pro still at 'auto')
+        },
 
     // Output Config
     // text: ... below
@@ -74,7 +82,6 @@ export function aixToOpenAIResponses(model: AixAPI_Model, chatGenerate: AixAPICh
     // background: false, // response if unset: false
     truncation: !hotFixNoTruncateAuto ? OPENAI_RESPONSES_DEFAULT_TRUNCATION : 'auto',
     // user: undefined,
-
   };
 
   // "top-p": if present, use instead of temperature
@@ -93,10 +100,15 @@ export function aixToOpenAIResponses(model: AixAPI_Model, chatGenerate: AixAPICh
     // };
   }
 
+  // GPT-5: Verbosity control
+  if (model.vndOaiTextVerbosity) {
+    if (!payload.text) payload.text = {} as NonNullable<TRequest['text']>;
+    payload.text.verbosity = model.vndOaiTextVerbosity as NonNullable<TRequest['text']>['verbosity'];
+  }
+
   // Tool: Search: for search models, and deep research models
   if (hotFixForceSearchTool || model.vndOaiWebSearchContext || model.userGeolocation) {
-    if (!payload.tools?.length)
-      payload.tools = [];
+    if (!payload.tools?.length) payload.tools = [];
     const webSearchTool: TRequestTool = {
       type: 'web_search_preview',
       search_context_size: model.vndOaiWebSearchContext ?? undefined,
@@ -107,7 +119,6 @@ export function aixToOpenAIResponses(model: AixAPI_Model, chatGenerate: AixAPICh
     };
     payload.tools.push(webSearchTool);
   }
-
 
   // Preemptive error detection with server-side payload validation before sending it upstream
   // this includes stripping 'undefined' fields
@@ -120,9 +131,10 @@ export function aixToOpenAIResponses(model: AixAPI_Model, chatGenerate: AixAPICh
   return validated.data;
 }
 
-
-function _toOpenAIResponsesRequestInput(systemMessage: AixMessages_SystemMessage | null, chatSequence: AixMessages_ChatMessage[]): { requestInput: TRequestInput[], requestInstructions: TRequest['instructions'] } {
-
+function _toOpenAIResponsesRequestInput(
+  systemMessage: AixMessages_SystemMessage | null,
+  chatSequence: AixMessages_ChatMessage[],
+): { requestInput: TRequestInput[]; requestInstructions: TRequest['instructions'] } {
   /**
    * Instructions to the model
    *
@@ -150,7 +162,6 @@ function _toOpenAIResponsesRequestInput(systemMessage: AixMessages_SystemMessage
   });
   const requestInstructions: TRequest['instructions'] = instructionsParts.length ? aixTexts_to_OpenAIInstructionText(instructionsParts) : undefined;
 
-
   // We decide to adopt these schemas for the conversion (API gives us a few choices)
   const chatMessages: (UserMessage | ModelMessage | FunctionCallMessage | FunctionCallOutputMessage)[] = [];
   type UserMessage = Omit<OpenAIWire_Responses_Items.UserItemMessage, 'role'> & { role: 'user' };
@@ -161,8 +172,7 @@ function _toOpenAIResponsesRequestInput(systemMessage: AixMessages_SystemMessage
   function userMessage() {
     // Ensure the last message is a user message, or create a new one
     let lastMessage = chatMessages.length ? chatMessages[chatMessages.length - 1] : undefined;
-    if (lastMessage && lastMessage.type === 'message' && lastMessage.role === 'user')
-      return lastMessage;
+    if (lastMessage && lastMessage.type === 'message' && lastMessage.role === 'user') return lastMessage;
     const newMessage: UserMessage = {
       type: 'message',
       role: 'user',
@@ -175,8 +185,7 @@ function _toOpenAIResponsesRequestInput(systemMessage: AixMessages_SystemMessage
   function modelMessage() {
     // Ensure the last message is a model message, or create a new one
     let lastMessage = chatMessages.length ? chatMessages[chatMessages.length - 1] : undefined;
-    if (lastMessage && lastMessage.type === 'message' && lastMessage.role === 'assistant')
-      return lastMessage;
+    if (lastMessage && lastMessage.type === 'message' && lastMessage.role === 'assistant') return lastMessage;
     const newMessage: ModelMessage = {
       type: 'message',
       role: 'assistant',
@@ -217,13 +226,11 @@ function _toOpenAIResponsesRequestInput(systemMessage: AixMessages_SystemMessage
    *
    */
   for (const { role: messageRole, parts: messageParts } of chatSequence) {
-
     switch (messageRole) {
       case 'user':
         for (const userPart of messageParts) {
           const uPt = userPart.pt;
           switch (uPt) {
-
             case 'text':
               userMessage().content.push({
                 type: 'input_text',
@@ -272,7 +279,6 @@ function _toOpenAIResponsesRequestInput(systemMessage: AixMessages_SystemMessage
         for (const modelPart of messageParts) {
           const mPt = modelPart.pt;
           switch (mPt) {
-
             case 'text':
               modelMessage().content.push({
                 type: 'output_text',
@@ -340,7 +346,6 @@ function _toOpenAIResponsesRequestInput(systemMessage: AixMessages_SystemMessage
         for (const toolPart of messageParts) {
           const tPt = toolPart.pt;
           switch (tPt) {
-
             case 'tool_response':
               const toolResponseType = toolPart.response.type;
               switch (toolResponseType) {
@@ -383,10 +388,9 @@ function _toOpenAIResponsesRequestInput(systemMessage: AixMessages_SystemMessage
 }
 
 function _toOpenAIResponsesTools(itds: AixTools_ToolDefinition[]): NonNullable<TRequestTool[]> {
-  return itds.map(itd => {
+  return itds.map((itd) => {
     const itdType = itd.type;
     switch (itdType) {
-
       case 'function_call':
         const { name, description, input_schema } = itd.function_call;
         return {
@@ -403,10 +407,13 @@ function _toOpenAIResponsesTools(itds: AixTools_ToolDefinition[]): NonNullable<T
       case 'code_execution':
         throw new Error('Gemini code interpreter is not supported');
 
+      // case 'custom':
+      //   // Removed for now
+      //   throw new Error('Custom free-form tools are disabled.');
+
       default:
         // const _exhaustiveCheck: never = itdType;
         throw new Error(`OpenAI (Responses API) unsupported tool: ${itdType}`);
-
     }
   });
 }
@@ -421,9 +428,26 @@ function _toOpenAIResponsesToolChoice(itp: AixTools_ToolsPolicy): NonNullable<TR
       return 'required';
     case 'function_call':
       return { type: 'function' as const, name: itp.function_call.name };
+    case 'allowed_tools':
+      return {
+        type: 'allowed_tools',
+        mode: itp.mode,
+        tools: itp.tools.map((t) => {
+          switch (t.type) {
+            case 'function':
+              return { type: 'function', name: t.name } as const;
+            case 'mcp':
+              return { type: 'mcp', server_label: t.server_label } as const;
+            case 'image_generation':
+              return { type: 'image_generation' } as const;
+            default:
+              const _never: never = t as never;
+              throw new Error(`Unsupported allowed tool type: ${(t as any).type}`);
+          }
+        }),
+      } as NonNullable<TRequest['tool_choice']>;
     default:
       const _exhaustiveCheck: never = itpType;
       throw new Error(`Unsupported tools policy type: ${itpType}`);
   }
 }
-

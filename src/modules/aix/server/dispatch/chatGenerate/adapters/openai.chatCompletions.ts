@@ -1,10 +1,19 @@
 import type { OpenAIDialects } from '~/modules/llms/server/openai/openai.router';
 
-import { AixAPI_Model, AixAPIChatGenerate_Request, AixMessages_ChatMessage, AixMessages_SystemMessage, AixParts_DocPart, AixParts_InlineAudioPart, AixParts_MetaInReferenceToPart, AixTools_ToolDefinition, AixTools_ToolsPolicy } from '../../../api/aix.wiretypes';
+import {
+  AixAPI_Model,
+  AixAPIChatGenerate_Request,
+  AixMessages_ChatMessage,
+  AixMessages_SystemMessage,
+  AixParts_DocPart,
+  AixParts_InlineAudioPart,
+  AixParts_MetaInReferenceToPart,
+  AixTools_ToolDefinition,
+  AixTools_ToolsPolicy,
+} from '../../../api/aix.wiretypes';
 import { OpenAIWire_API_Chat_Completions, OpenAIWire_ContentParts, OpenAIWire_Messages } from '../../wiretypes/openai.wiretypes';
 
 import { approxDocPart_To_String } from './anthropic.messageCreate';
-
 
 //
 // OpenAI API - Chat Adapter - Implementation Notes
@@ -25,12 +34,16 @@ const hotFixForceImageContentPartOpenAIDetail: 'auto' | 'low' | 'high' = 'high';
 const hotFixSquashTextSeparator = '\n\n\n---\n\n\n';
 const approxSystemMessageJoiner = '\n\n---\n\n';
 
-
 type TRequest = OpenAIWire_API_Chat_Completions.Request;
 type TRequestMessages = TRequest['messages'];
 
-export function aixToOpenAIChatCompletions(openAIDialect: OpenAIDialects, model: AixAPI_Model, chatGenerate: AixAPIChatGenerate_Request, jsonOutput: boolean, streaming: boolean): TRequest {
-
+export function aixToOpenAIChatCompletions(
+  openAIDialect: OpenAIDialects,
+  model: AixAPI_Model,
+  chatGenerate: AixAPIChatGenerate_Request,
+  jsonOutput: boolean,
+  streaming: boolean,
+): TRequest {
   // Dialect incompatibilities -> Hotfixes
   const hotFixAlternateUserAssistantRoles = openAIDialect === 'deepseek' || openAIDialect === 'perplexity';
   const hotFixRemoveEmptyMessages = openAIDialect === 'perplexity';
@@ -44,30 +57,29 @@ export function aixToOpenAIChatCompletions(openAIDialect: OpenAIDialects, model:
   // [OpenAI] - o1 models
   // - o1 models don't support system messages, we could hotfix this here once and for all, but we want to transfer the responsibility to the UI for better messaging to the user
   // - o1 models also use the new 'max_completion_tokens' rather than 'max_tokens', breaking API compatibility, so we have to address it here
-  const hotFixOpenAIOFamily = (openAIDialect === 'openai' || openAIDialect === 'azure') && (
-    model.id === 'o1' || model.id.startsWith('o1-') ||
-    model.id === 'o3' || model.id.startsWith('o3-') ||
-    model.id === 'o4' || model.id.startsWith('o4-') ||
-    model.id === 'o5' || model.id.startsWith('o5-')
-  );
+  const hotFixOpenAIOFamily =
+    (openAIDialect === 'openai' || openAIDialect === 'azure') &&
+    (model.id === 'o1' ||
+      model.id.startsWith('o1-') ||
+      model.id === 'o3' ||
+      model.id.startsWith('o3-') ||
+      model.id === 'o4' ||
+      model.id.startsWith('o4-') ||
+      model.id === 'o5' ||
+      model.id.startsWith('o5-'));
 
   // Throw if function support is needed but missing
-  if (chatGenerate.tools?.length && hotFixThrowCannotFC)
-    throw new Error('This service does not support function calls');
+  if (chatGenerate.tools?.length && hotFixThrowCannotFC) throw new Error('This service does not support function calls');
 
   // Convert the chat messages to the OpenAI 4-Messages format
   let chatMessages = _toOpenAIMessages(chatGenerate.systemMessage, chatGenerate.chatSequence, hotFixOpenAIOFamily);
 
   // Apply hotfixes
-  if (hotFixSquashMultiPartText)
-    chatMessages = _fixSquashMultiPartText(chatMessages);
+  if (hotFixSquashMultiPartText) chatMessages = _fixSquashMultiPartText(chatMessages);
 
-  if (hotFixRemoveEmptyMessages)
-    chatMessages = _fixRemoveEmptyMessages(chatMessages);
+  if (hotFixRemoveEmptyMessages) chatMessages = _fixRemoveEmptyMessages(chatMessages);
 
-  if (hotFixAlternateUserAssistantRoles)
-    chatMessages = _fixAlternateUserAssistantRoles(chatMessages);
-
+  if (hotFixAlternateUserAssistantRoles) chatMessages = _fixAlternateUserAssistantRoles(chatMessages);
 
   // Construct the request payload
   let payload: TRequest = {
@@ -89,8 +101,7 @@ export function aixToOpenAIChatCompletions(openAIDialect: OpenAIDialects, model:
   };
 
   // [OpenRouter, 2025-01-24]
-  if (hotFixVndORIncludeReasoning)
-    payload.include_reasoning = true;
+  if (hotFixVndORIncludeReasoning) payload.include_reasoning = true;
 
   // Top-P instead of temperature
   if (model.topP !== undefined) {
@@ -102,6 +113,10 @@ export function aixToOpenAIChatCompletions(openAIDialect: OpenAIDialects, model:
   if (model.vndOaiReasoningEffort) {
     payload.reasoning_effort = model.vndOaiReasoningEffort;
   }
+  // [OpenAI GPT-5] Verbosity (Chat Completions root-level)
+  if ((model as any).vndOaiTextVerbosity) {
+    (payload as any).verbosity = (model as any).vndOaiTextVerbosity;
+  }
   // [OpenAI] Vendor-specific restore markdown, for newer o1 models
   if (model.vndOaiRestoreMarkdown) {
     _fixVndOaiRestoreMarkdown_Inline(payload);
@@ -109,8 +124,7 @@ export function aixToOpenAIChatCompletions(openAIDialect: OpenAIDialects, model:
   // [OpenAI] Vendor-specific web search context and/or geolocation
   if (model.vndOaiWebSearchContext || model.userGeolocation) {
     payload.web_search_options = {};
-    if (model.vndOaiWebSearchContext)
-      payload.web_search_options.search_context_size = model.vndOaiWebSearchContext;
+    if (model.vndOaiWebSearchContext) payload.web_search_options.search_context_size = model.vndOaiWebSearchContext;
     if (model.userGeolocation)
       payload.web_search_options.user_location = {
         type: 'approximate',
@@ -127,25 +141,22 @@ export function aixToOpenAIChatCompletions(openAIDialect: OpenAIDialects, model:
     };
 
     // mode defaults to 'auto' if not specified, so only include if not 'auto'
-    if (model.vndXaiSearchMode && model.vndXaiSearchMode !== 'auto')
-      search_parameters.mode = model.vndXaiSearchMode;
+    if (model.vndXaiSearchMode && model.vndXaiSearchMode !== 'auto') search_parameters.mode = model.vndXaiSearchMode;
 
     if (model.vndXaiSearchSources) {
       const sources = model.vndXaiSearchSources
         .split(',')
-        .map(s => s.trim())
-        .filter(s => !!s);
-      
+        .map((s) => s.trim())
+        .filter((s) => !!s);
+
       // only omit sources if it's the default ('web' and 'x')
       const isDefaultSources = sources.length === 2 && sources.includes('web') && sources.includes('x');
-      if (!isDefaultSources)
-        search_parameters.sources = sources.map(s => ({ type: s }));
+      if (!isDefaultSources) search_parameters.sources = sources.map((s) => ({ type: s }));
     }
 
     if (model.vndXaiSearchDateFilter && model.vndXaiSearchDateFilter !== 'unfiltered') {
       const fromDate = _convertSimpleDateFilterToISO(model.vndXaiSearchDateFilter);
-      if (fromDate)
-        search_parameters.from_date = fromDate;
+      if (fromDate) search_parameters.from_date = fromDate;
     }
 
     payload.search_parameters = search_parameters;
@@ -172,7 +183,6 @@ export function aixToOpenAIChatCompletions(openAIDialect: OpenAIDialects, model:
 
   // [OpenRouter] -> [Anthropic] via OpenAI API - https://openrouter.ai/docs/use-cases/reasoning-tokens
   if (openAIDialect === 'openrouter' && model.vndAntThinkingBudget !== undefined) {
-
     // vndAntThinkingBudget's presence indicates a user preference:
     // - [x] a number, which is the budget in tokens
     // - [ ] null: shall disable thinking, but openrouter does not support this?
@@ -186,11 +196,9 @@ export function aixToOpenAIChatCompletions(openAIDialect: OpenAIDialects, model:
     }
   }
 
-  if (hotFixOpenAIOFamily)
-    payload = _fixRequestForOpenAIO1_maxCompletionTokens(payload);
+  if (hotFixOpenAIOFamily) payload = _fixRequestForOpenAIO1_maxCompletionTokens(payload);
 
-  if (hotFixRemoveStreamOptions)
-    payload = _fixRemoveStreamOptions(payload);
+  if (hotFixRemoveStreamOptions) payload = _fixRemoveStreamOptions(payload);
 
   // Preemptive error detection with server-side payload validation before sending it upstream
   const validated = OpenAIWire_API_Chat_Completions.Request_schema.safeParse(payload);
@@ -205,21 +213,17 @@ export function aixToOpenAIChatCompletions(openAIDialect: OpenAIDialects, model:
   return validated.data;
 }
 
-
 function _fixAlternateUserAssistantRoles(chatMessages: TRequestMessages): TRequestMessages {
-
   // [Perplexity, 2025-06-23] HotFix: if there's only 1 message from the system, treat it as a user message
-  if (chatMessages.length === 1 && chatMessages[0].role === 'system')
-    return [{ ...chatMessages[0], role: 'user' }];
+  if (chatMessages.length === 1 && chatMessages[0].role === 'system') return [{ ...chatMessages[0], role: 'user' }];
 
   // [Perplexity, 2025-06-23] HotFix: if an assistant message comes before the first user message, we prepend an empty user message
-  const firstUserIndex = chatMessages.findIndex(message => message.role === 'user');
-  const firstAssistantIndex = chatMessages.findIndex(message => message.role === 'assistant');
+  const firstUserIndex = chatMessages.findIndex((message) => message.role === 'user');
+  const firstAssistantIndex = chatMessages.findIndex((message) => message.role === 'assistant');
   if (firstAssistantIndex !== -1 && firstAssistantIndex < firstUserIndex)
     chatMessages.splice(firstAssistantIndex, 0, { role: 'user', content: [{ type: 'text', text: '' }] });
 
   return chatMessages.reduce((acc, historyItem) => {
-
     // treat intermediate system messages as user messages
     if (acc.length > 0 && historyItem.role === 'system') {
       historyItem = {
@@ -237,7 +241,11 @@ function _fixAlternateUserAssistantRoles(chatMessages: TRequestMessages): TReque
         } else if (lastItem.role === 'user') {
           lastItem.content = [
             ...(Array.isArray(lastItem.content) ? lastItem.content : [OpenAIWire_ContentParts.TextContentPart(lastItem.content)]),
-            ...(Array.isArray(historyItem.content) ? historyItem.content : historyItem.content ? [OpenAIWire_ContentParts.TextContentPart(historyItem.content)] : []),
+            ...(Array.isArray(historyItem.content)
+              ? historyItem.content
+              : historyItem.content
+                ? [OpenAIWire_ContentParts.TextContentPart(historyItem.content)]
+                : []),
           ];
         }
         return acc;
@@ -251,19 +259,17 @@ function _fixAlternateUserAssistantRoles(chatMessages: TRequestMessages): TReque
 }
 
 function _fixRemoveEmptyMessages(chatMessages: TRequestMessages): TRequestMessages {
-  return chatMessages.filter(message => message.content !== null && message.content !== '');
+  return chatMessages.filter((message) => message.content !== null && message.content !== '');
 }
 
 function _fixRequestForOpenAIO1_maxCompletionTokens(payload: TRequest): TRequest {
-
   // Remove temperature and top_p controls
   const { max_tokens, temperature: _removeTemperature, top_p: _removeTopP, ...rest } = payload;
 
   // Change max_tokens to max_completion_tokens:
   // - pre-o1: max_tokens is the output amount
   // - o1: max_completion_tokens is the output amount + reasoning amount
-  if (max_tokens)
-    rest.max_completion_tokens = max_tokens;
+  if (max_tokens) rest.max_completion_tokens = max_tokens;
 
   return rest;
 }
@@ -277,15 +283,20 @@ function _fixSquashMultiPartText(chatMessages: TRequestMessages): TRequestMessag
   // Convert multi-part text messages to single strings for older OpenAI dialects
   return chatMessages.reduce((acc, message) => {
     if (message.role === 'user' && Array.isArray(message.content))
-      acc.push({ role: message.role, content: message.content.filter(part => part.type === 'text').map(textPart => textPart.text).filter(text => !!text).join(hotFixSquashTextSeparator) });
-    else
-      acc.push(message);
+      acc.push({
+        role: message.role,
+        content: message.content
+          .filter((part) => part.type === 'text')
+          .map((textPart) => textPart.text)
+          .filter((text) => !!text)
+          .join(hotFixSquashTextSeparator),
+      });
+    else acc.push(message);
     return acc;
   }, [] as TRequestMessages);
 }
 
 function _fixVndOaiRestoreMarkdown_Inline(payload: TRequest) {
-
   // OpenAI - https://platform.openai.com/docs/guides/reasoning/advice-on-prompting#advice-on-prompting
   //
   // As of 2025-01-12, OpenAI states: << Markdown formatting: Starting with o1-2024-12-17,
@@ -308,7 +319,6 @@ function _fixVndOaiRestoreMarkdown_Inline(payload: TRequest) {
       payload.messages.unshift({ role: 'developer', content: 'Formatting re-enabled' });
     }
   }
-
 }
 
 /*function _fixUseDeprecatedFunctionCalls(payload: OpenaiWire_ChatCompletionRequest): OpenaiWire_ChatCompletionRequest {
@@ -326,9 +336,11 @@ function _fixVndOaiRestoreMarkdown_Inline(payload: TRequest) {
   return rest;
 }*/
 
-
-function _toOpenAIMessages(systemMessage: AixMessages_SystemMessage | null, chatSequence: AixMessages_ChatMessage[], hotFixOpenAIo1Family: boolean): TRequestMessages {
-
+function _toOpenAIMessages(
+  systemMessage: AixMessages_SystemMessage | null,
+  chatSequence: AixMessages_ChatMessage[],
+  hotFixOpenAIo1Family: boolean,
+): TRequestMessages {
   // Transform the chat messages into OpenAI's format (an array of 'system', 'user', 'assistant', and 'tool' messages)
   const chatMessages: TRequestMessages = [];
 
@@ -363,37 +375,30 @@ function _toOpenAIMessages(systemMessage: AixMessages_SystemMessage | null, chat
        * o3-mini accepts both system and developer roles, and they seem to have the same effects
        */
       role: !hotFixOpenAIo1Family ? 'system' : 'developer',
-      content: aixTexts_to_OpenAIInstructionText(msg0TextParts.map(text => text.text)),
+      content: aixTexts_to_OpenAIInstructionText(msg0TextParts.map((text) => text.text)),
     });
-
 
   // Convert the messages
   for (const { parts, role } of chatSequence) {
     switch (role) {
-
       case 'user':
         for (const part of parts) {
           const currentMessage = chatMessages[chatMessages.length - 1];
           switch (part.pt) {
-
             case 'text':
               const textContentPart = OpenAIWire_ContentParts.TextContentPart(part.text);
 
               // Append to existing content[], or new message
-              if (currentMessage?.role === 'user' && Array.isArray(currentMessage.content))
-                currentMessage.content.push(textContentPart);
-              else
-                chatMessages.push({ role: 'user', content: hotFixPreferArrayUserContent ? [textContentPart] : textContentPart.text });
+              if (currentMessage?.role === 'user' && Array.isArray(currentMessage.content)) currentMessage.content.push(textContentPart);
+              else chatMessages.push({ role: 'user', content: hotFixPreferArrayUserContent ? [textContentPart] : textContentPart.text });
               break;
 
             case 'doc':
               const docContentPart = aixDocPart_to_OpenAITextContent(part);
 
               // Append to existing content[], or new message
-              if (currentMessage?.role === 'user' && Array.isArray(currentMessage.content))
-                currentMessage.content.push(docContentPart);
-              else
-                chatMessages.push({ role: 'user', content: hotFixPreferArrayUserContent ? [docContentPart] : docContentPart.text });
+              if (currentMessage?.role === 'user' && Array.isArray(currentMessage.content)) currentMessage.content.push(docContentPart);
+              else chatMessages.push({ role: 'user', content: hotFixPreferArrayUserContent ? [docContentPart] : docContentPart.text });
               break;
 
             case 'inline_image':
@@ -403,10 +408,8 @@ function _toOpenAIMessages(systemMessage: AixMessages_SystemMessage | null, chat
               const imageContentPart = OpenAIWire_ContentParts.ImageContentPart(base64DataUrl, hotFixForceImageContentPartOpenAIDetail);
 
               // Append to existing content[], or new message
-              if (currentMessage?.role === 'user' && Array.isArray(currentMessage.content))
-                currentMessage.content.push(imageContentPart);
-              else
-                chatMessages.push({ role: 'user', content: [imageContentPart] });
+              if (currentMessage?.role === 'user' && Array.isArray(currentMessage.content)) currentMessage.content.push(imageContentPart);
+              else chatMessages.push({ role: 'user', content: [imageContentPart] });
               break;
 
             case 'meta_cache_control':
@@ -431,7 +434,6 @@ function _toOpenAIMessages(systemMessage: AixMessages_SystemMessage | null, chat
         for (const part of parts) {
           const currentMessage = chatMessages[chatMessages.length - 1];
           switch (part.pt) {
-
             case 'text':
               // create a new OpenAIWire_AssistantMessage
               chatMessages.push({ role: 'assistant', content: part.text });
@@ -448,10 +450,8 @@ function _toOpenAIMessages(systemMessage: AixMessages_SystemMessage | null, chat
               const audioContentPart = OpenAIWire_ContentParts.OpenAI_AudioContentPart(audioBase64DataUrl, audioFormat);
 
               // Append to existing content[], or new message
-              if (currentMessage?.role === 'user' && Array.isArray(currentMessage.content))
-                currentMessage.content.push(audioContentPart);
-              else
-                chatMessages.push({ role: 'user', content: [audioContentPart] });
+              if (currentMessage?.role === 'user' && Array.isArray(currentMessage.content)) currentMessage.content.push(audioContentPart);
+              else chatMessages.push({ role: 'user', content: [audioContentPart] });
               break;
 
             case 'inline_image':
@@ -465,10 +465,8 @@ function _toOpenAIMessages(systemMessage: AixMessages_SystemMessage | null, chat
               const imageContentPart = OpenAIWire_ContentParts.ImageContentPart(imageBase64DataUrl, hotFixForceImageContentPartOpenAIDetail);
 
               // Append to existing content[], or new message
-              if (currentMessage?.role === 'user' && Array.isArray(currentMessage.content))
-                currentMessage.content.push(imageContentPart);
-              else
-                chatMessages.push({ role: 'user', content: [imageContentPart] });
+              if (currentMessage?.role === 'user' && Array.isArray(currentMessage.content)) currentMessage.content.push(imageContentPart);
+              else chatMessages.push({ role: 'user', content: [imageContentPart] });
               break;
 
             case 'tool_invocation':
@@ -494,12 +492,9 @@ function _toOpenAIMessages(systemMessage: AixMessages_SystemMessage | null, chat
 
               // Append to existing content[], or new message
               if (currentMessage?.role === 'assistant') {
-                if (!Array.isArray(currentMessage.tool_calls))
-                  currentMessage.tool_calls = [toolCallPart];
-                else
-                  currentMessage.tool_calls.push(toolCallPart);
-              } else
-                chatMessages.push({ role: 'assistant', content: null, tool_calls: [toolCallPart] });
+                if (!Array.isArray(currentMessage.tool_calls)) currentMessage.tool_calls = [toolCallPart];
+                else currentMessage.tool_calls.push(toolCallPart);
+              } else chatMessages.push({ role: 'assistant', content: null, tool_calls: [toolCallPart] });
               break;
 
             case 'ma':
@@ -514,20 +509,17 @@ function _toOpenAIMessages(systemMessage: AixMessages_SystemMessage | null, chat
               const _exhaustiveCheck: never = part;
               throw new Error(`Unsupported part type in Model message: ${(part as any).pt}`);
           }
-
         }
         break;
 
       case 'tool':
         for (const part of parts) {
           switch (part.pt) {
-
             case 'tool_response':
               const toolErrorPrefix = part.error ? (typeof part.error === 'string' ? `[ERROR] ${part.error} - ` : '[ERROR] ') : '';
               if (part.response.type === 'function_call' || part.response.type === 'code_execution')
                 chatMessages.push(OpenAIWire_Messages.ToolMessage(part.id, toolErrorPrefix + part.response.result));
-              else
-                throw new Error(`Unsupported tool response type in Tool message: ${(part as any).pt}`);
+              else throw new Error(`Unsupported tool response type in Tool message: ${(part as any).pt}`);
               break;
 
             case 'meta_cache_control':
@@ -547,10 +539,9 @@ function _toOpenAIMessages(systemMessage: AixMessages_SystemMessage | null, chat
 }
 
 function _toOpenAITools(itds: AixTools_ToolDefinition[]): NonNullable<TRequest['tools']> {
-  return itds.map(itd => {
+  return itds.map((itd) => {
     const itdType = itd.type;
     switch (itdType) {
-
       case 'function_call':
         const { name, description, input_schema } = itd.function_call;
         return {
@@ -572,7 +563,6 @@ function _toOpenAITools(itds: AixTools_ToolDefinition[]): NonNullable<TRequest['
       default:
         // const _exhaustiveCheck: never = itdType;
         throw new Error(`OpenAI (classic API) unsupported tool: ${itdType}`);
-
     }
   });
 }
@@ -594,9 +584,14 @@ function _toOpenAIToolChoice(openAIDialect: OpenAIDialects, itp: AixTools_ToolsP
       return 'required';
     case 'function_call':
       return { type: 'function' as const, function: { name: itp.function_call.name } };
+    case 'allowed_tools':
+      // Chat Completions does not support passing the explicit list; map to mode only
+      return itp.mode;
+    default:
+      const _exhaustiveCheck: never = itp;
+      throw new Error(`Unsupported tools policy type: ${(itp as any)?.type}`);
   }
 }
-
 
 // Approximate conversions
 
@@ -615,12 +610,10 @@ export function aixAudioPart_to_OpenAIAudioFormat(part: AixParts_InlineAudioPart
 
 export function aixMetaRef_to_OpenAIText(irt: AixParts_MetaInReferenceToPart): string {
   // Get the item texts without roles
-  const items = irt.referTo.map(r => r.mText);
-  if (items.length === 0)
-    return 'CONTEXT: The user provides no specific references.';
+  const items = irt.referTo.map((r) => r.mText);
+  if (items.length === 0) return 'CONTEXT: The user provides no specific references.';
 
-  const isShortItem = (text: string): boolean =>
-    text.split('\n').length <= 3 && text.length <= 200;
+  const isShortItem = (text: string): boolean => text.split('\n').length <= 3 && text.length <= 200;
 
   const formatItem = (text: string, index?: number): string => {
     if (isShortItem(text)) {
@@ -631,19 +624,17 @@ export function aixMetaRef_to_OpenAIText(irt: AixParts_MetaInReferenceToPart): s
   };
 
   // Formerly: `The user is referring to this in particular:\n{{ReplyToText}}`.replace('{{ReplyToText}}', part.replyTo);
-  if (items.length === 1)
-    return `CONTEXT: The user is referring to this in particular:\n${formatItem(items[0])}`;
+  if (items.length === 1) return `CONTEXT: The user is referring to this in particular:\n${formatItem(items[0])}`;
 
   const allShort = items.every(isShortItem);
-  return `CONTEXT: The user is referring to these ${items.length} in particular:\n\n${
-    items.map((text, index) => formatItem(text, index)).join(allShort ? '\n' : '\n\n')}`;
+  return `CONTEXT: The user is referring to these ${items.length} in particular:\n\n${items
+    .map((text, index) => formatItem(text, index))
+    .join(allShort ? '\n' : '\n\n')}`;
 }
 
 export function aixDocPart_to_OpenAITextContent(part: AixParts_DocPart): OpenAIWire_ContentParts.TextContentPart {
-
   // Corner case, low probability: if the content is already enclosed in triple-backticks, return it as-is
-  if (part.data.text.startsWith('```'))
-    return OpenAIWire_ContentParts.TextContentPart(part.data.text);
+  if (part.data.text.startsWith('```')) return OpenAIWire_ContentParts.TextContentPart(part.data.text);
 
   return OpenAIWire_ContentParts.TextContentPart(approxDocPart_To_String(part));
 }
@@ -651,7 +642,6 @@ export function aixDocPart_to_OpenAITextContent(part: AixParts_DocPart): OpenAIW
 export function aixTexts_to_OpenAIInstructionText(texts: string[]): string {
   return texts.join(approxSystemMessageJoiner);
 }
-
 
 // Vendor specific extensions
 

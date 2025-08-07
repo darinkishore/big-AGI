@@ -9,14 +9,14 @@ import type { MCPTool, MCPToolCall, MCPToolResult } from './types/mcp.types';
 const mcpServerConfigSchema = z.object({
   command: z.string(),
   args: z.array(z.string()).optional(),
-  env: z.record(z.string()).optional(),
+  env: z.record(z.string(), z.string()).optional(),
   transport: z.enum(['stdio', 'sse']).optional(),
 });
 
 const mcpToolCallSchema = z.object({
   serverId: z.string(),
   name: z.string(),
-  arguments: z.record(z.unknown()).optional(),
+  arguments: z.record(z.string(), z.unknown()).optional(),
 });
 
 // Get the singleton connection manager instance
