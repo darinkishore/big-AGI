@@ -32,11 +32,13 @@ type TRequestTool = OpenAIWire_Responses_Tools.Tool;
 export function aixToOpenAIResponses(model: AixAPI_Model, chatGenerate: AixAPIChatGenerate_Request, jsonOutput: boolean, streaming: boolean): TRequest {
   // [OpenAI] Vendor-specific model checks
   const isOpenAIOFamily = ['o1', 'o3', 'o4', 'o5'].some((m) => model.id === m || model.id.startsWith(m + '-'));
+  const isOpenAIGPT5 = model.id === 'gpt-5' || model.id.startsWith('gpt-5-') || model.id === 'gpt-5-chat-latest';
   const isOpenAIComputerUse = model.id.includes('computer-use');
   const isOpenAIO1Pro = model.id === 'o1-pro' || model.id.startsWith('o1-pro-');
   const isOpenAIDeepResearch = model.id.includes('-deep-research');
 
-  const hotFixNoTemperature = isOpenAIOFamily;
+  // NOTE: GPT-5 and o1/o3/o4/o5 families do not support temperature/top_p in Responses API
+  const hotFixNoTemperature = isOpenAIOFamily || isOpenAIGPT5;
   const hotFixNoTruncateAuto = isOpenAIComputerUse;
   const hotFixForceSearchTool = isOpenAIDeepResearch;
 
@@ -85,7 +87,7 @@ export function aixToOpenAIResponses(model: AixAPI_Model, chatGenerate: AixAPICh
   };
 
   // "top-p": if present, use instead of temperature
-  if (model.topP !== undefined) {
+  if (!hotFixNoTemperature && model.topP !== undefined) {
     delete payload.temperature;
     payload.top_p = model.topP;
   }
