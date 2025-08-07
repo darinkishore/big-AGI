@@ -1,8 +1,15 @@
 import { escapeXml } from '~/server/wire';
 
-import type { AixAPI_Model, AixAPIChatGenerate_Request, AixMessages_ChatMessage, AixParts_DocPart, AixParts_MetaInReferenceToPart, AixTools_ToolDefinition, AixTools_ToolsPolicy } from '../../../api/aix.wiretypes';
+import type {
+  AixAPI_Model,
+  AixAPIChatGenerate_Request,
+  AixMessages_ChatMessage,
+  AixParts_DocPart,
+  AixParts_MetaInReferenceToPart,
+  AixTools_ToolDefinition,
+  AixTools_ToolsPolicy,
+} from '../../../api/aix.wiretypes';
 import { AnthropicWire_API_Message_Create, AnthropicWire_Blocks } from '../../wiretypes/anthropic.wiretypes';
-
 
 // configuration
 const hotFixImagePartsFirst = true;
@@ -11,43 +18,39 @@ const hotFixMapModelImagesToUser = true;
 // former fixes, now removed
 // const hackyHotFixStartWithUser = false; // 2024-10-22: no longer required
 
-
 type TRequest = AnthropicWire_API_Message_Create.Request;
 
 export function aixToAnthropicMessageCreate(model: AixAPI_Model, chatGenerate: AixAPIChatGenerate_Request, streaming: boolean): TRequest {
-
   // Convert the system message
   let systemMessage: TRequest['system'] = undefined;
   if (chatGenerate.systemMessage?.parts.length) {
-    systemMessage = chatGenerate.systemMessage.parts.reduce((acc, part) => {
-      switch (part.pt) {
+    systemMessage = chatGenerate.systemMessage.parts.reduce(
+      (acc, part) => {
+        switch (part.pt) {
+          case 'text':
+            acc.push(AnthropicWire_Blocks.TextBlock(part.text));
+            break;
 
-        case 'text':
-          acc.push(AnthropicWire_Blocks.TextBlock(part.text));
-          break;
+          case 'doc':
+            acc.push(AnthropicWire_Blocks.TextBlock(approxDocPart_To_String(part)));
+            break;
 
-        case 'doc':
-          acc.push(AnthropicWire_Blocks.TextBlock(approxDocPart_To_String(part)));
-          break;
+          case 'meta_cache_control':
+            if (!acc.length) console.warn('Anthropic: cache_control without a message to attach to');
+            else if (part.control !== 'anthropic-ephemeral') console.warn('Anthropic: cache_control with an unsupported value:', part.control);
+            else AnthropicWire_Blocks.blockSetCacheControl(acc[acc.length - 1], 'ephemeral');
+            break;
 
-        case 'meta_cache_control':
-          if (!acc.length)
-            console.warn('Anthropic: cache_control without a message to attach to');
-          else if (part.control !== 'anthropic-ephemeral')
-            console.warn('Anthropic: cache_control with an unsupported value:', part.control);
-          else
-            AnthropicWire_Blocks.blockSetCacheControl(acc[acc.length - 1], 'ephemeral');
-          break;
-
-        default:
-          throw new Error(`Unsupported part type in System message: ${(part as any).pt}`);
-      }
-      return acc;
-    }, [] as Exclude<TRequest['system'], undefined>);
+          default:
+            throw new Error(`Unsupported part type in System message: ${(part as any).pt}`);
+        }
+        return acc;
+      },
+      [] as Exclude<TRequest['system'], undefined>,
+    );
 
     // unset system message if empty
-    if (!systemMessage.length)
-      systemMessage = undefined;
+    if (!systemMessage.length) systemMessage = undefined;
   }
 
   // Transform the chat messages into Anthropic's format
@@ -59,26 +62,21 @@ export function aixToAnthropicMessageCreate(model: AixAPI_Model, chatGenerate: A
       if ('set_cache_control' in antPart) {
         if (currentMessage && currentMessage.content.length) {
           const lastBlock = currentMessage.content[currentMessage.content.length - 1];
-          if (lastBlock.type !== 'thinking' && lastBlock.type !== 'redacted_thinking')
-            AnthropicWire_Blocks.blockSetCacheControl(lastBlock, 'ephemeral');
-          else
-            console.warn('Anthropic: cache_control on a thinking block - not allowed');
-        } else
-          console.warn('Anthropic: cache_control without a message to attach to');
+          if (lastBlock.type !== 'thinking' && lastBlock.type !== 'redacted_thinking') AnthropicWire_Blocks.blockSetCacheControl(lastBlock, 'ephemeral');
+          else console.warn('Anthropic: cache_control on a thinking block - not allowed');
+        } else console.warn('Anthropic: cache_control without a message to attach to');
         continue;
       }
       // create a new message if the role changes, otherwise append as a new content block
       const { role, content } = antPart;
       if (!currentMessage || currentMessage.role !== role) {
-        if (currentMessage)
-          chatMessages.push(currentMessage);
+        if (currentMessage) chatMessages.push(currentMessage);
         currentMessage = { role, content: [] };
       }
       currentMessage.content.push(content);
     }
   }
-  if (currentMessage)
-    chatMessages.push(currentMessage);
+  if (currentMessage) chatMessages.push(currentMessage);
 
   // If the first (user) message is missing, copy the first line of the system message
   // [Anthropic] October 8th, 2024 release notes: "...we no longer require the first input message to be a user message."
@@ -112,12 +110,15 @@ export function aixToAnthropicMessageCreate(model: AixAPI_Model, chatGenerate: A
 
   // [Anthropic] Thinking Budget
   if (model.vndAntThinkingBudget !== undefined) {
-    payload.thinking = model.vndAntThinkingBudget !== null ? {
-      type: 'enabled',
-      budget_tokens: model.vndAntThinkingBudget < payload.max_tokens ? model.vndAntThinkingBudget : payload.max_tokens - 1,
-    } : {
-      type: 'disabled',
-    };
+    payload.thinking =
+      model.vndAntThinkingBudget !== null
+        ? {
+            type: 'enabled',
+            budget_tokens: model.vndAntThinkingBudget < payload.max_tokens ? model.vndAntThinkingBudget : payload.max_tokens - 1,
+          }
+        : {
+            type: 'disabled',
+          };
     delete payload.temperature;
   }
 
@@ -131,13 +132,15 @@ export function aixToAnthropicMessageCreate(model: AixAPI_Model, chatGenerate: A
   return validated.data;
 }
 
-
-function* _generateAnthropicMessagesContentBlocks({ parts, role }: AixMessages_ChatMessage): Generator<{
-  role: 'user' | 'assistant',
-  content: TRequest['messages'][number]['content'][number]
-} | {
-  set_cache_control: 'anthropic-ephemeral'
-}> {
+function* _generateAnthropicMessagesContentBlocks({ parts, role }: AixMessages_ChatMessage): Generator<
+  | {
+      role: 'user' | 'assistant';
+      content: TRequest['messages'][number]['content'][number];
+    }
+  | {
+      set_cache_control: 'anthropic-ephemeral';
+    }
+> {
   if (parts.length < 1) return; // skip empty messages
 
   if (hotFixImagePartsFirst) {
@@ -149,11 +152,9 @@ function* _generateAnthropicMessagesContentBlocks({ parts, role }: AixMessages_C
   }
 
   switch (role) {
-
     case 'user':
       for (const part of parts) {
         switch (part.pt) {
-
           case 'text':
             yield { role: 'user', content: AnthropicWire_Blocks.TextBlock(part.text) };
             break;
@@ -168,8 +169,7 @@ function* _generateAnthropicMessagesContentBlocks({ parts, role }: AixMessages_C
 
           case 'meta_in_reference_to':
             const irtXMLString = approxInReferenceTo_To_XMLString(part);
-            if (irtXMLString)
-              yield { role: 'user', content: AnthropicWire_Blocks.TextBlock(irtXMLString) };
+            if (irtXMLString) yield { role: 'user', content: AnthropicWire_Blocks.TextBlock(irtXMLString) };
             break;
 
           case 'meta_cache_control':
@@ -185,7 +185,6 @@ function* _generateAnthropicMessagesContentBlocks({ parts, role }: AixMessages_C
     case 'model':
       for (const part of parts) {
         switch (part.pt) {
-
           case 'text':
             yield { role: 'assistant', content: AnthropicWire_Blocks.TextBlock(part.text) };
             break;
@@ -198,8 +197,7 @@ function* _generateAnthropicMessagesContentBlocks({ parts, role }: AixMessages_C
             // Example of mapping a model-generated image (even from other vendors, not just Anthropic) to a user message
             if (hotFixMapModelImagesToUser) {
               yield { role: 'user', content: AnthropicWire_Blocks.ImageBlock(part.mimeType, part.base64) };
-            } else
-              throw new Error('Model-generated images are not supported by Anthropic yet');
+            } else throw new Error('Model-generated images are not supported by Anthropic yet');
             break;
 
           case 'tool_invocation':
@@ -219,12 +217,9 @@ function* _generateAnthropicMessagesContentBlocks({ parts, role }: AixMessages_C
             break;
 
           case 'ma':
-            if (!part.aText && !part.textSignature && !part.redactedData)
-              throw new Error('Extended Thinking data is missing');
-            if (part.aText && part.textSignature)
-              yield { role: 'assistant', content: AnthropicWire_Blocks.ThinkingBlock(part.aText, part.textSignature) };
-            for (const redactedData of part.redactedData || [])
-              yield { role: 'assistant', content: AnthropicWire_Blocks.RedactedThinkingBlock(redactedData) };
+            if (!part.aText && !part.textSignature && !part.redactedData) throw new Error('Extended Thinking data is missing');
+            if (part.aText && part.textSignature) yield { role: 'assistant', content: AnthropicWire_Blocks.ThinkingBlock(part.aText, part.textSignature) };
+            for (const redactedData of part.redactedData || []) yield { role: 'assistant', content: AnthropicWire_Blocks.RedactedThinkingBlock(redactedData) };
             break;
 
           case 'meta_cache_control':
@@ -241,7 +236,6 @@ function* _generateAnthropicMessagesContentBlocks({ parts, role }: AixMessages_C
     case 'tool':
       for (const part of parts) {
         switch (part.pt) {
-
           case 'tool_response':
             const toolErrorPrefix = part.error ? (typeof part.error === 'string' ? `[ERROR] ${part.error} - ` : '[ERROR] ') : '';
             switch (part.response.type) {
@@ -272,9 +266,8 @@ function* _generateAnthropicMessagesContentBlocks({ parts, role }: AixMessages_C
 }
 
 function _toAnthropicTools(itds: AixTools_ToolDefinition[]): NonNullable<TRequest['tools']> {
-  return itds.map(itd => {
+  return itds.map((itd) => {
     switch (itd.type) {
-
       case 'function_call':
         const { name, description, input_schema } = itd.function_call;
         return {
@@ -290,7 +283,6 @@ function _toAnthropicTools(itds: AixTools_ToolDefinition[]): NonNullable<TReques
 
       case 'code_execution':
         throw new Error('Gemini code interpreter is not supported');
-
     }
   });
 }
@@ -303,9 +295,14 @@ function _toAnthropicToolChoice(itp: AixTools_ToolsPolicy): NonNullable<TRequest
       return { type: 'any' as const };
     case 'function_call':
       return { type: 'tool' as const, name: itp.function_call.name };
+    case 'allowed_tools':
+      // Anthropic Messages API does not support an explicit allowed tools list; map mode only
+      return { type: itp.mode as 'auto' | 'any' } as NonNullable<TRequest['tool_choice']>;
+    default:
+      const _exhaustiveCheck: never = itp;
+      throw new Error(`Unsupported tools policy type: ${(itp as any)?.type}`);
   }
 }
-
 
 // Approximate conversions - alternative approaches should be tried until we find the best one
 
@@ -322,9 +319,8 @@ export function approxDocPart_To_String({ ref, data }: AixParts_DocPart /*, wrap
 }
 
 export function approxInReferenceTo_To_XMLString(irt: AixParts_MetaInReferenceToPart): string | null {
-  const refs = irt.referTo.map(r => escapeXml(r.mText));
-  if (!refs.length)
-    return null; // `<context>User provides no specific references</context>`;
+  const refs = irt.referTo.map((r) => escapeXml(r.mText));
+  if (!refs.length) return null; // `<context>User provides no specific references</context>`;
   return refs.length === 1
     ? `<context>User refers to this in particular:<ref>${refs[0]}</ref></context>`
     : `<context>User refers to ${refs.length} items:<ref>${refs.join('</ref><ref>')}</ref></context>`;

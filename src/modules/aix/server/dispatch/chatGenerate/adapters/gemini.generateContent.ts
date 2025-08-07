@@ -1,46 +1,63 @@
-import type { AixAPI_Model, AixAPIChatGenerate_Request, AixMessages_ChatMessage, AixParts_DocPart, AixTools_ToolDefinition, AixTools_ToolsPolicy } from '../../../api/aix.wiretypes';
-import { GeminiWire_API_Generate_Content, GeminiWire_ContentParts, GeminiWire_Messages, GeminiWire_Safety, GeminiWire_ToolDeclarations } from '../../wiretypes/gemini.wiretypes';
+import type {
+  AixAPI_Model,
+  AixAPIChatGenerate_Request,
+  AixMessages_ChatMessage,
+  AixParts_DocPart,
+  AixTools_ToolDefinition,
+  AixTools_ToolsPolicy,
+} from '../../../api/aix.wiretypes';
+import {
+  GeminiWire_API_Generate_Content,
+  GeminiWire_ContentParts,
+  GeminiWire_Messages,
+  GeminiWire_Safety,
+  GeminiWire_ToolDeclarations,
+} from '../../wiretypes/gemini.wiretypes';
 
 import { approxDocPart_To_String, approxInReferenceTo_To_XMLString } from './anthropic.messageCreate';
-
 
 // configuration
 const hotFixImagePartsFirst = true;
 const hotFixReplaceEmptyMessagesWithEmptyTextPart = true;
 
-
-export function aixToGeminiGenerateContent(model: AixAPI_Model, chatGenerate: AixAPIChatGenerate_Request, geminiSafetyThreshold: GeminiWire_Safety.HarmBlockThreshold, jsonOutput: boolean, _streaming: boolean): TRequest {
-
+export function aixToGeminiGenerateContent(
+  model: AixAPI_Model,
+  chatGenerate: AixAPIChatGenerate_Request,
+  geminiSafetyThreshold: GeminiWire_Safety.HarmBlockThreshold,
+  jsonOutput: boolean,
+  _streaming: boolean,
+): TRequest {
   // Note: the streaming setting is ignored as it only belongs in the path
 
   // System Instructions
   let systemInstruction: TRequest['systemInstruction'] = undefined;
   if (chatGenerate.systemMessage?.parts.length) {
-    systemInstruction = chatGenerate.systemMessage.parts.reduce((acc, part) => {
-      switch (part.pt) {
+    systemInstruction = chatGenerate.systemMessage.parts.reduce(
+      (acc, part) => {
+        switch (part.pt) {
+          case 'text':
+            acc.parts.push(GeminiWire_ContentParts.TextPart(part.text));
+            break;
 
-        case 'text':
-          acc.parts.push(GeminiWire_ContentParts.TextPart(part.text));
-          break;
+          case 'doc':
+            acc.parts.push(GeminiWire_ContentParts.TextPart(approxDocPart_To_String(part)));
+            break;
 
-        case 'doc':
-          acc.parts.push(GeminiWire_ContentParts.TextPart(approxDocPart_To_String(part)));
-          break;
+          case 'meta_cache_control':
+            // ignore this breakpoint hint - Anthropic only
+            break;
 
-        case 'meta_cache_control':
-          // ignore this breakpoint hint - Anthropic only
-          break;
-
-        default:
-          const _exhaustiveCheck: never = part;
-          throw new Error(`Unsupported part type in System message: ${(part as any).pt}`);
-      }
-      return acc;
-    }, { parts: [] } as Exclude<TRequest['systemInstruction'], undefined>);
+          default:
+            const _exhaustiveCheck: never = part;
+            throw new Error(`Unsupported part type in System message: ${(part as any).pt}`);
+        }
+        return acc;
+      },
+      { parts: [] } as Exclude<TRequest['systemInstruction'], undefined>,
+    );
 
     // unset system instruction if empty
-    if (!systemInstruction.parts.length)
-      systemInstruction = undefined;
+    if (!systemInstruction.parts.length) systemInstruction = undefined;
   }
 
   // Chat Messages
@@ -76,13 +93,11 @@ export function aixToGeminiGenerateContent(model: AixAPI_Model, chatGenerate: Ai
     const thinkingConfig: Exclude<TRequest['generationConfig'], undefined>['thinkingConfig'] = {};
 
     // This seems deprecated keep it in case Gemini turns it on again
-    if (model.vndGeminiShowThoughts)
-      thinkingConfig.includeThoughts = true;
+    if (model.vndGeminiShowThoughts) thinkingConfig.includeThoughts = true;
 
     // 0 disables thinking explicitly
     if (model.vndGeminiThinkingBudget !== undefined) {
-      if (model.vndGeminiThinkingBudget > 0)
-        thinkingConfig.includeThoughts = true;
+      if (model.vndGeminiThinkingBudget > 0) thinkingConfig.includeThoughts = true;
       thinkingConfig.thinkingBudget = model.vndGeminiThinkingBudget;
     }
 
@@ -92,7 +107,6 @@ export function aixToGeminiGenerateContent(model: AixAPI_Model, chatGenerate: Ai
   // [Gemini, 2025-05-20] Experimental Audio generation (TTS - audio only, no text): Request
   const noTextOutput = !model.acceptsOutputs.includes('text');
   if (model.acceptsOutputs.includes('audio')) {
-
     // (undocumented) Adapt the request
     delete payload.systemInstruction;
     delete payload.generationConfig!.maxOutputTokens; // maxOutputTokens is not supported for audio-only output
@@ -135,15 +149,12 @@ export function aixToGeminiGenerateContent(model: AixAPI_Model, chatGenerate: Ai
 
 type TRequest = GeminiWire_API_Generate_Content.Request;
 
-
 function _toGeminiContents(chatSequence: AixMessages_ChatMessage[]): GeminiWire_Messages.Content[] {
-
   // Remove messages that are made of empty parts
   // if (hotFixRemoveEmptyMessages)
   //   chatSequence = chatSequence.filter(message => message.parts.length > 0);
 
-
-  return chatSequence.map(message => {
+  return chatSequence.map((message) => {
     const parts: GeminiWire_ContentParts.ContentPart[] = [];
 
     if (hotFixImagePartsFirst) {
@@ -164,7 +175,6 @@ function _toGeminiContents(chatSequence: AixMessages_ChatMessage[]): GeminiWire_
 
     for (const part of message.parts) {
       switch (part.pt) {
-
         case 'text':
           parts.push(GeminiWire_ContentParts.TextPart(part.text));
           break;
@@ -188,8 +198,7 @@ function _toGeminiContents(chatSequence: AixMessages_ChatMessage[]): GeminiWire_
 
         case 'meta_in_reference_to':
           const irtXMLString = approxInReferenceTo_To_XMLString(part);
-          if (irtXMLString)
-            parts.push(GeminiWire_ContentParts.TextPart(irtXMLString));
+          if (irtXMLString) parts.push(GeminiWire_ContentParts.TextPart(irtXMLString));
           break;
 
         case 'tool_invocation':
@@ -214,8 +223,7 @@ function _toGeminiContents(chatSequence: AixMessages_ChatMessage[]): GeminiWire_
               parts.push(GeminiWire_ContentParts.FunctionCallPart(invocation.name, functionCallArgs));
               break;
             case 'code_execution':
-              if (invocation.language?.toLowerCase() !== 'python')
-                console.warn('Gemini only supports Python code execution, but got:', invocation.language);
+              if (invocation.language?.toLowerCase() !== 'python') console.warn('Gemini only supports Python code execution, but got:', invocation.language);
               parts.push(GeminiWire_ContentParts.ExecutableCodePart('PYTHON', invocation.code));
               break;
             default:
@@ -250,7 +258,9 @@ function _toGeminiContents(chatSequence: AixMessages_ChatMessage[]): GeminiWire_
               parts.push(GeminiWire_ContentParts.FunctionResponsePart(part.response._name || part.id, functionResponseResponse));
               break;
             case 'code_execution':
-              parts.push(GeminiWire_ContentParts.CodeExecutionResultPart(!part.error ? 'OUTCOME_OK' : 'OUTCOME_FAILED', toolErrorPrefix + part.response.result));
+              parts.push(
+                GeminiWire_ContentParts.CodeExecutionResultPart(!part.error ? 'OUTCOME_OK' : 'OUTCOME_FAILED', toolErrorPrefix + part.response.result),
+              );
               break;
             default:
               const _exhaustiveCheck: never = part.response;
@@ -274,9 +284,8 @@ function _toGeminiContents(chatSequence: AixMessages_ChatMessage[]): GeminiWire_
 function _toGeminiTools(itds: AixTools_ToolDefinition[]): NonNullable<TRequest['tools']> {
   const tools: TRequest['tools'] = [];
 
-  itds.forEach(itd => {
+  itds.forEach((itd) => {
     switch (itd.type) {
-
       // Note: we add each function call as a separate tool, however it could be possible to add
       // a single tool with multiple function calls - which one to choose?
       case 'function_call':
@@ -311,12 +320,10 @@ function _toGeminiTools(itds: AixTools_ToolDefinition[]): NonNullable<TRequest['
         break;
 
       case 'code_execution':
-        if (itd.variant !== 'gemini_auto_inline')
-          throw new Error('Gemini only supports inline code execution');
+        if (itd.variant !== 'gemini_auto_inline') throw new Error('Gemini only supports inline code execution');
 
         // throw if code execution is present more than once
-        if (tools.some(tool => tool.codeExecution))
-          throw new Error('Gemini code interpreter already defined');
+        if (tools.some((tool) => tool.codeExecution)) throw new Error('Gemini code interpreter already defined');
 
         tools.push({
           codeExecution: {
@@ -325,7 +332,6 @@ function _toGeminiTools(itds: AixTools_ToolDefinition[]): NonNullable<TRequest['
           },
         });
         break;
-
     }
   });
 
@@ -345,19 +351,27 @@ function _toGeminiToolConfig(itp: AixTools_ToolsPolicy): NonNullable<TRequest['t
           allowedFunctionNames: [itp.function_call.name],
         },
       };
+    case 'allowed_tools':
+      // Gemini does not support an explicit allowed tools list; map to mode only
+      return { functionCallingConfig: { mode: itp.mode === 'required' ? 'ANY' : 'AUTO' } } as NonNullable<TRequest['toolConfig']>;
+    default: {
+      const _exhaustiveCheck: never = itp;
+      throw new Error(`Unsupported tools policy type: ${(itp as any)?.type}`);
+    }
   }
 }
 
 function _toGeminiSafetySettings(threshold: GeminiWire_Safety.HarmBlockThreshold): TRequest['safetySettings'] {
-  return threshold === 'HARM_BLOCK_THRESHOLD_UNSPECIFIED' ? undefined : [
-    { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: threshold },
-    { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: threshold },
-    { category: 'HARM_CATEGORY_HARASSMENT', threshold: threshold },
-    { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: threshold },
-    { category: 'HARM_CATEGORY_CIVIC_INTEGRITY', threshold: threshold },
-  ];
+  return threshold === 'HARM_BLOCK_THRESHOLD_UNSPECIFIED'
+    ? undefined
+    : [
+        { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: threshold },
+        { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: threshold },
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: threshold },
+        { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: threshold },
+        { category: 'HARM_CATEGORY_CIVIC_INTEGRITY', threshold: threshold },
+      ];
 }
-
 
 // Approximate conversions - alternative approaches should be tried until we find the best one
 

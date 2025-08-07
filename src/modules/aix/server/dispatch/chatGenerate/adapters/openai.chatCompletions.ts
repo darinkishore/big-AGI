@@ -66,7 +66,10 @@ export function aixToOpenAIChatCompletions(
       model.id === 'o4' ||
       model.id.startsWith('o4-') ||
       model.id === 'o5' ||
-      model.id.startsWith('o5-'));
+      model.id.startsWith('o5-') ||
+      model.id === 'gpt-5-chat-latest' ||
+      model.id === 'gpt-5' ||
+      model.id.startsWith('gpt-5-'));
 
   // Throw if function support is needed but missing
   if (chatGenerate.tools?.length && hotFixThrowCannotFC) throw new Error('This service does not support function calls');
