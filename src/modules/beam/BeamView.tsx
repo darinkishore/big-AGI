@@ -3,9 +3,12 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { Alert, Box, CircularProgress } from '@mui/joy';
 
-import { ConfirmationModal } from '~/common/components/ConfirmationModal';
+import { ConfirmationModal } from '~/common/components/modals/ConfirmationModal';
+import { ShortcutKey, useGlobalShortcuts } from '~/common/components/shortcuts/useGlobalShortcuts';
 import { animationEnterScaleUp } from '~/common/util/animUtils';
-import { useUICounter } from '~/common/state/store-ui';
+import { copyToClipboard } from '~/common/util/clipboardUtils';
+import { messageFragmentsReduceText } from '~/common/stores/chat/chat.message';
+import { useUICounter } from '~/common/stores/store-ui';
 
 import { BeamExplainer } from './BeamExplainer';
 import { BeamFusionGrid } from './gather/BeamFusionGrid';
@@ -30,9 +33,12 @@ export function BeamView(props: {
 
   // external state
   const { novel: explainerUnseen, touch: explainerCompleted, forget: explainerShow } = useUICounter('beam-wizard');
-  const gatherAutoStartAfterScatter = useModuleBeamStore(state => state.gatherAutoStartAfterScatter);
+  const { cardAdd, gatherAutoStartAfterScatter } = useModuleBeamStore(useShallow(state => ({
+    cardAdd: state.cardAdd,
+    gatherAutoStartAfterScatter: state.gatherAutoStartAfterScatter,
+  })));
   const {
-    /* root */ editInputHistoryMessage,
+    /* root */ inputHistoryReplaceMessageFragment,
     /* scatter */ setRayCount, startScatteringAll, stopScatteringAll,
   } = props.beamStore.getState();
   const {
@@ -65,9 +71,25 @@ export function BeamView(props: {
 
   const handleRayIncreaseCount = React.useCallback(() => setRayCount(raysCount + 1), [setRayCount, raysCount]);
 
-  const handleScatterStart = React.useCallback(() => {
+  const handleRaysOperation = React.useCallback((operation: 'copy' | 'use') => {
+    const { rays, onSuccessCallback } = props.beamStore.getState();
+    const allFragments = rays.flatMap(ray => ray.message.fragments);
+    if (allFragments.length) {
+      switch (operation) {
+        case 'copy':
+          const combinedText = messageFragmentsReduceText(allFragments, '\n\n\n---\n\n\n');
+          copyToClipboard(combinedText, 'All Beams');
+          break;
+        case 'use':
+          onSuccessCallback?.({ fragments: allFragments });
+          break;
+      }
+    }
+  }, [props.beamStore]);
+
+  const handleScatterStart = React.useCallback((restart: boolean) => {
     setHasAutoMerged(false);
-    startScatteringAll();
+    startScatteringAll(restart);
   }, [startScatteringAll]);
 
 
@@ -117,19 +139,27 @@ export function BeamView(props: {
   // }, [bootup, handleRaySetCount]);
 
 
+  // intercept ctrl+enter and esc
+  useGlobalShortcuts('BeamView', React.useMemo(() => [
+    { key: ShortcutKey.Enter, ctrl: true, action: () => handleScatterStart(false), disabled: isScattering, level: 1 },
+    ...(isScattering ? [{ key: ShortcutKey.Esc, action: stopScatteringAll, level: 10 + 1 /* becasuse > ChatBarAltBeam */ }] : []),
+  ], [handleScatterStart, isScattering, stopScatteringAll]));
+
+
   // Explainer, if unseen
   if (props.showExplainer && explainerUnseen)
     return <BeamExplainer onWizardComplete={explainerCompleted} />;
 
   return <>
 
-    <Box sx={{
+    <Box role='beam-list' sx={{
       // scroller fill
       minHeight: '100%',
       // ...props.sx,
 
       // enter animation
-      animation: `${animationEnterScaleUp} 0.2s cubic-bezier(.17,.84,.44,1)`,
+      // NOTE: disabled: off-putting/confusing when the beam content is large - things won't combine nicely
+      // animation: `${animationEnterScaleUp} 5s cubic-bezier(.17,.84,.44,1)`,
 
       // config
       '--Pad': { xs: '1rem', md: '1.5rem' },
@@ -149,7 +179,7 @@ export function BeamView(props: {
       <BeamScatterInput
         isMobile={props.isMobile}
         history={inputHistory}
-        editHistory={editInputHistoryMessage}
+        onMessageFragmentReplace={inputHistoryReplaceMessageFragment}
       />
 
       {/* Scatter Controls */}
@@ -158,21 +188,26 @@ export function BeamView(props: {
         isMobile={props.isMobile}
         rayCount={raysCount}
         setRayCount={handleRaySetCount}
+        showRayAdd={!cardAdd}
         startEnabled={inputReady}
         startBusy={isScattering}
+        startRestart={!props.isMobile && raysReady >= 1 && raysReady < raysCount && !isScattering}
         onStart={handleScatterStart}
         onStop={stopScatteringAll}
         onExplainerShow={explainerShow}
       />
 
 
-      {/* Rays Grid */}
+      {/* Rays Grid - BeamRay[] > <ChatMessage /> */}
       <BeamRayGrid
         beamStore={props.beamStore}
         isMobile={props.isMobile}
         rayIds={rayIds}
+        showRayAdd={cardAdd}
+        showRaysOps={(isScattering || raysReady < 2) ? undefined : raysReady}
         hadImportedRays={hadImportedRays}
         onIncreaseRayCount={handleRayIncreaseCount}
+        onRaysOperation={handleRaysOperation}
         // linkedLlmId={currentGatherLlmId}
       />
 
@@ -190,7 +225,7 @@ export function BeamView(props: {
         raysReady={raysReady}
       />
 
-      {/* Fusion Grid */}
+      {/* Fusion Grid - Fusion[] > <ChatMessage /> */}
       <BeamFusionGrid
         beamStore={props.beamStore}
         canGather={canGather}

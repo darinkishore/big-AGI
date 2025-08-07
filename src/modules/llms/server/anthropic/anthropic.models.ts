@@ -1,154 +1,210 @@
+import { LLM_IF_ANT_PromptCaching, LLM_IF_OAI_Chat, LLM_IF_OAI_Fn, LLM_IF_OAI_Reasoning, LLM_IF_OAI_Vision } from '~/common/stores/llms/llms.types';
+
 import type { ModelDescriptionSchema } from '../llm.server.types';
 
-import { LLM_IF_OAI_Chat, LLM_IF_OAI_Vision } from '../../store-llms';
 
-const roundTime = (date: string) => Math.round(new Date(date).getTime() / 1000);
+export const hardcodedAnthropicVariants: { [modelId: string]: Partial<ModelDescriptionSchema> } = {
+
+  // Claude 4.1 models with thinking variants
+  'claude-opus-4-1-20250805': {
+    idVariant: 'thinking',
+    label: 'Claude Opus 4.1 (Thinking)',
+    description: 'Claude Opus 4.1 with extended thinking mode enabled for complex reasoning',
+    parameterSpecs: [{ paramId: 'llmVndAntThinkingBudget', required: true, hidden: false }],
+    maxCompletionTokens: 32000,
+    interfaces: [LLM_IF_OAI_Chat, LLM_IF_OAI_Vision, LLM_IF_OAI_Fn, LLM_IF_ANT_PromptCaching, LLM_IF_OAI_Reasoning],
+    benchmark: { cbaElo: 1420 + 10 /* Estimated higher than Opus 4 thinking */ },
+  },
+
+  // Claude 4 models with thinking variants
+  'claude-opus-4-20250514': {
+    hidden: true, // superseded by 4.1
+    idVariant: 'thinking',
+    label: 'Claude Opus 4 (Thinking)',
+    description: 'Claude Opus 4 with extended thinking mode enabled for complex reasoning',
+    parameterSpecs: [{ paramId: 'llmVndAntThinkingBudget', required: true, hidden: false }],
+    maxCompletionTokens: 32000,
+    interfaces: [LLM_IF_OAI_Chat, LLM_IF_OAI_Vision, LLM_IF_OAI_Fn, LLM_IF_ANT_PromptCaching, LLM_IF_OAI_Reasoning],
+    benchmark: { cbaElo: 1420 },
+  },
+
+  'claude-sonnet-4-20250514': {
+    idVariant: 'thinking',
+    label: 'Claude Sonnet 4 (Thinking)',
+    description: 'Claude Sonnet 4 with extended thinking mode enabled for complex reasoning',
+    parameterSpecs: [{ paramId: 'llmVndAntThinkingBudget', required: true, hidden: false }],
+    maxCompletionTokens: 64000,
+    interfaces: [LLM_IF_OAI_Chat, LLM_IF_OAI_Vision, LLM_IF_OAI_Fn, LLM_IF_ANT_PromptCaching, LLM_IF_OAI_Reasoning],
+    benchmark: { cbaElo: 1399 },
+  },
+
+  // Changes to the thinking variant (same model ID) for the Claude Sonnet 3.7 model
+  'claude-3-7-sonnet-20250219': {
+    idVariant: 'thinking',
+    label: 'Claude Sonnet 3.7 (Thinking)',
+    description: 'Claude 3.7 with extended thinking mode enabled for complex reasoning',
+    parameterSpecs: [{ paramId: 'llmVndAntThinkingBudget', required: true, hidden: false }],
+    maxCompletionTokens: 64000,
+    interfaces: [LLM_IF_OAI_Chat, LLM_IF_OAI_Vision, LLM_IF_OAI_Fn, LLM_IF_ANT_PromptCaching, LLM_IF_OAI_Reasoning],
+    benchmark: { cbaElo: 1385 },
+  },
+
+} as const;
+
 
 export const hardcodedAnthropicModels: (ModelDescriptionSchema & { isLegacy?: boolean })[] = [
-  // Claude 3.5 models - https://docs.anthropic.com/en/docs/about-claude/models
-  // {
-  //   id: 'claude-3.5-opus', // ...
-  //   label: 'Claude 3.5 Opus',
-  //   created: roundTime(?),
-  //   description: ?,
-  //   contextWindow: 200000 ?, // Characters
-  //   maxCompletionTokens: 4096 ?,
-  //   trainingDataCutoff: ?,
-  //   interfaces: [LLM_IF_OAI_Chat, LLM_IF_OAI_Vision],
-  //   pricing: { chatIn: 15, chatOut: 75 },
-  //   benchmark: {
-  //     cbaElo: 1256, // Placeholder
-  //     cbaMmlu: 86.8, // Placeholder
-  //   },
-  // },
+
+  // Claude 4.1 models
   {
-    id: 'claude-3-5-sonnet-20240620',
-    label: 'Claude 3.5 Sonnet',
-    created: roundTime('2024-06-20 06:00'),
-    description: 'The most intelligent Claude model',
-    contextWindow: 200000, // Characters
+    id: 'claude-opus-4-1-20250805', // Active
+    label: 'Claude Opus 4.1', // 🌟
+    description: 'Most capable and intelligent model yet. Sets new standards in complex reasoning and advanced coding',
+    contextWindow: 200000,
+    maxCompletionTokens: 32000,
+    trainingDataCutoff: 'Aug 2025',
+    interfaces: [LLM_IF_OAI_Chat, LLM_IF_OAI_Vision, LLM_IF_OAI_Fn, LLM_IF_ANT_PromptCaching],
+    chatPrice: { input: 15, output: 75, cache: { cType: 'ant-bp', read: 1.50, write: 18.75, duration: 300 } },
+    benchmark: { cbaElo: 1420 /* Estimated higher than Opus 4 */ },
+  },
+
+  // Claude 4 models
+  {
+    hidden: true, // superseded by 4.1
+    id: 'claude-opus-4-20250514', // Active
+    label: 'Claude Opus 4',
+    description: 'Previous flagship model with very high intelligence and capability',
+    contextWindow: 200000,
+    maxCompletionTokens: 32000,
+    trainingDataCutoff: 'Mar 2025',
+    interfaces: [LLM_IF_OAI_Chat, LLM_IF_OAI_Vision, LLM_IF_OAI_Fn, LLM_IF_ANT_PromptCaching],
+    chatPrice: { input: 15, output: 75, cache: { cType: 'ant-bp', read: 1.50, write: 18.75, duration: 300 } },
+    benchmark: { cbaElo: 1412 },
+  },
+  {
+    id: 'claude-sonnet-4-20250514', // Active
+    label: 'Claude Sonnet 4', // 🌟
+    description: 'High-performance model with exceptional reasoning and efficiency',
+    contextWindow: 200000,
+    maxCompletionTokens: 64000,
+    trainingDataCutoff: 'Mar 2025',
+    interfaces: [LLM_IF_OAI_Chat, LLM_IF_OAI_Vision, LLM_IF_OAI_Fn, LLM_IF_ANT_PromptCaching],
+    chatPrice: { input: 3, output: 15, cache: { cType: 'ant-bp', read: 0.30, write: 3.75, duration: 300 } },
+    benchmark: { cbaElo: 1386 },
+  },
+
+  // Claude 3.7 models
+  {
+    id: 'claude-3-7-sonnet-20250219', // Active | Guaranteed Until: February 2026
+    label: 'Claude Sonnet 3.7',
+    description: 'High-performance model with early extended thinking',
+    contextWindow: 200000,
+    maxCompletionTokens: 64000,
+    trainingDataCutoff: 'Oct 2024',
+    interfaces: [LLM_IF_OAI_Chat, LLM_IF_OAI_Vision, LLM_IF_OAI_Fn, LLM_IF_ANT_PromptCaching],
+    chatPrice: { input: 3, output: 15, cache: { cType: 'ant-bp', read: 0.30, write: 3.75, duration: 300 } },
+    benchmark: { cbaElo: 1369 },
+  },
+
+  // Claude 3.5 models
+  {
+    id: 'claude-3-5-sonnet-20241022', // Active | Guaranteed Until: October 2025
+    label: 'Claude Sonnet 3.5',
+    description: 'High level of intelligence and capability',
+    contextWindow: 200000,
     maxCompletionTokens: 8192,
     trainingDataCutoff: 'Apr 2024',
-    interfaces: [LLM_IF_OAI_Chat, LLM_IF_OAI_Vision],
-    pricing: { chatIn: 3, chatOut: 15 },
-    benchmark: {
-      heCode: 92.0,
-      vqaMmmu: 68.3,
-      // TODO: Update with official benchmarks when available
-      cbaElo: 1256 - 1, // Placeholder
-      cbaMmlu: 86.8 - 1, // Placeholder
-    },
+    interfaces: [LLM_IF_OAI_Chat, LLM_IF_OAI_Vision, LLM_IF_OAI_Fn, LLM_IF_ANT_PromptCaching],
+    chatPrice: { input: 3, output: 15, cache: { cType: 'ant-bp', read: 0.30, write: 3.75, duration: 300 } },
+    benchmark: { cbaElo: 1366, cbaMmlu: 88.7 },
   },
-  // {
-  //   id: 'claude-3.5-haiku', // ...
-  //   label: 'Claude 3.5 Haiku',
-  //   created: roundTime(?),
-  //   description: ?,
-  //   contextWindow: 200000 ?, // Characters
-  //   maxCompletionTokens: 4096 ?,
-  //   trainingDataCutoff: ?,
-  //   interfaces: [LLM_IF_OAI_Chat, LLM_IF_OAI_Vision],
-  //   pricing: { chatIn: 0.25, chatOut: 1.25 },
-  //   benchmark: {
-  //     cbaElo: 1181, // Placeholder
-  //     cbaMmlu: 75.2, // Placeholder
-  //   },
-  // },
-
+  {
+    id: 'claude-3-5-sonnet-20240620', // Active | Guaranteed Until: June 2025
+    label: 'Claude Sonnet 3.5 (previous)',
+    description: 'Previous version of Claude Sonnet 3.5',
+    contextWindow: 200000,
+    maxCompletionTokens: 8192,
+    trainingDataCutoff: 'Apr 2024',
+    interfaces: [LLM_IF_OAI_Chat, LLM_IF_OAI_Vision, LLM_IF_OAI_Fn, LLM_IF_ANT_PromptCaching],
+    chatPrice: { input: 3, output: 15, cache: { cType: 'ant-bp', read: 0.30, write: 3.75, duration: 300 } },
+    benchmark: { cbaElo: 1339, cbaMmlu: 88.6 },
+    hidden: true,
+  },
+  {
+    id: 'claude-3-5-haiku-20241022', // Active | Guaranteed Until: October 2025
+    label: 'Claude Haiku 3.5',
+    description: 'Intelligence at blazing speeds',
+    contextWindow: 200000,
+    maxCompletionTokens: 8192,
+    trainingDataCutoff: 'Jul 2024',
+    interfaces: [LLM_IF_OAI_Chat, LLM_IF_OAI_Vision, LLM_IF_OAI_Fn, LLM_IF_ANT_PromptCaching],
+    chatPrice: { input: 0.80, output: 4.00, cache: { cType: 'ant-bp', read: 0.08, write: 1.00, duration: 300 } },
+    benchmark: { cbaElo: 1316, cbaMmlu: 75.2 },
+  },
 
   // Claude 3 models
   {
-    id: 'claude-3-opus-20240229',
-    label: 'Claude 3 Opus',
-    created: roundTime('2024-02-29'),
-    description: 'Powerful model for complex tasks',
+    id: 'claude-3-opus-20240229', // Deprecated | Deprecated: June 30, 2025 | Retiring: January 5, 2026
+    label: 'Claude Opus 3 [Deprecated]',
+    description: 'Powerful model for complex tasks. Deprecated June 30, 2025, retiring January 5, 2026.',
     contextWindow: 200000,
     maxCompletionTokens: 4096,
     trainingDataCutoff: 'Aug 2023',
-    interfaces: [LLM_IF_OAI_Chat, LLM_IF_OAI_Vision],
-    pricing: { chatIn: 15, chatOut: 75 },
-    benchmark: { cbaElo: 1256, cbaMmlu: 86.8 },
+    interfaces: [LLM_IF_OAI_Chat, LLM_IF_OAI_Vision, LLM_IF_OAI_Fn, LLM_IF_ANT_PromptCaching],
+    chatPrice: { input: 15, output: 75, cache: { cType: 'ant-bp', read: 1.50, write: 18.75, duration: 300 } },
+    benchmark: { cbaElo: 1321, cbaMmlu: 86.8 },
+    hidden: true, // deprecated
+    isLegacy: true,
   },
   {
-    id: 'claude-3-sonnet-20240229',
-    label: 'Claude 3 Sonnet',
-    created: roundTime('2024-02-29'),
-    description: 'Balance of speed, cost, and performance',
+    id: 'claude-3-haiku-20240307', // Active | Guaranteed Until: March 2025
+    label: 'Claude Haiku 3',
+    description: 'Quick and accurate targeted performance',
     contextWindow: 200000,
     maxCompletionTokens: 4096,
     trainingDataCutoff: 'Aug 2023',
-    interfaces: [LLM_IF_OAI_Chat, LLM_IF_OAI_Vision],
-    pricing: { chatIn: 3, chatOut: 15 },
-    benchmark: { cbaElo: 1203, cbaMmlu: 79 },
-    hidden: true,
-  },
-  {
-    id: 'claude-3-haiku-20240307',
-    label: 'Claude 3 Haiku',
-    created: roundTime('2024-03-07'),
-    description: 'Fastest, most cost-effective model',
-    contextWindow: 200000,
-    maxCompletionTokens: 4096,
-    trainingDataCutoff: 'Aug 2023',
-    interfaces: [LLM_IF_OAI_Chat, LLM_IF_OAI_Vision],
-    pricing: { chatIn: 0.25, chatOut: 1.25 },
-    benchmark: { cbaElo: 1181, cbaMmlu: 75.2 },
+    interfaces: [LLM_IF_OAI_Chat, LLM_IF_OAI_Vision, LLM_IF_OAI_Fn, LLM_IF_ANT_PromptCaching],
+    chatPrice: { input: 0.25, output: 1.25, cache: { cType: 'ant-bp', read: 0.03, write: 0.30, duration: 300 } },
+    benchmark: { cbaElo: 1179, cbaMmlu: 75.1 },
   },
 
-  // Claude 2 models
+  // Legacy/Retired models
   {
-    id: 'claude-2.1',
-    label: 'Claude 2.1',
-    created: roundTime('2023-11-21'),
-    description: 'Superior performance on tasks that require complex reasoning, with reduced model hallucination rates',
+    id: 'claude-3-sonnet-20240229', // Retired | Retired: July 21, 2025
+    label: 'Claude Sonnet 3 [Retired]',
+    description: 'Balance of intelligence and speed. Retired July 21, 2025.',
     contextWindow: 200000,
     maxCompletionTokens: 4096,
-    interfaces: [LLM_IF_OAI_Chat],
-    pricing: { chatIn: 8, chatOut: 24 },
-    benchmark: { cbaElo: 1119 },
+    trainingDataCutoff: 'Aug 2023',
+    interfaces: [LLM_IF_OAI_Chat, LLM_IF_OAI_Vision],
+    chatPrice: { input: 3, output: 15 },
+    benchmark: { cbaElo: 1201, cbaMmlu: 79 },
     hidden: true,
+    isLegacy: true,
   },
   {
-    id: 'claude-2.0',
-    label: 'Claude 2',
-    created: roundTime('2023-07-11'),
-    description: 'Superior performance on tasks that require complex reasoning',
-    contextWindow: 100000,
+    id: 'claude-2.1', // Retired | Retired: July 21, 2025
+    label: 'Claude 2.1 [Retired]',
+    description: 'Updated version of Claude 2 with improved accuracy. Retired July 21, 2025.',
+    contextWindow: 200000,
     maxCompletionTokens: 4096,
+    trainingDataCutoff: 'Early 2023',
     interfaces: [LLM_IF_OAI_Chat],
-    pricing: { chatIn: 8, chatOut: 24 },
-    benchmark: { cbaElo: 1131, cbaMmlu: 78.5 },
+    chatPrice: { input: 8, output: 24 },
+    benchmark: { cbaElo: 1118 },
     hidden: true,
+    isLegacy: true,
   },
   {
-    id: 'claude-instant-1.2',
-    label: 'Claude Instant 1.2',
-    created: roundTime('2023-08-09'),
-    description: 'Low-latency, high throughput model',
+    id: 'claude-2.0', // Retired | Retired: July 21, 2025
+    label: 'Claude 2 [Retired]',
+    description: 'Predecessor to Claude 3, offering strong all-round performance. Retired July 21, 2025.',
     contextWindow: 100000,
     maxCompletionTokens: 4096,
+    trainingDataCutoff: 'Early 2023',
     interfaces: [LLM_IF_OAI_Chat],
-    pricing: { chatIn: 0.8, chatOut: 2.4 },
+    chatPrice: { input: 8, output: 24 },
+    benchmark: { cbaElo: 1132, cbaMmlu: 78.5 },
     hidden: true,
+    isLegacy: true,
   },
-  // {
-  //   id: 'claude-instant-1.1',
-  //   label: 'Claude Instant 1.1',
-  //   created: roundTime('2023-03-14'),
-  //   description: 'Precise and fast',
-  //   contextWindow: 100000,
-  //   maxCompletionTokens: 2048,
-  //   interfaces: [LLM_IF_OAI_Chat],
-  //   hidden: true,
-  // },
-  // {
-  //   id: 'claude-1.3',
-  //   label: 'Claude 1.3',
-  //   created: roundTime('2023-03-14'),
-  //   description: 'Claude 1.3 is the latest version of Claude v1',
-  //   contextWindow: 100000,
-  //   maxCompletionTokens: 4096,
-  //   interfaces: [LLM_IF_OAI_Chat],
-  //   hidden: true,
-  // },
 ];

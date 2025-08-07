@@ -1,64 +1,37 @@
-import { sendGAEvent } from '@next/third-parties/google';
+import { hasGoogleAnalytics, sendGAEvent } from '~/common/components/3rdparty/GoogleAnalytics';
 
-import { hasGoogleAnalytics } from '~/common/components/GoogleAnalytics';
+import type { DModelsService, DModelsServiceId } from '~/common/stores/llms/llms.service.types';
+import { DLLM, LLM_IF_HOTFIX_NoTemperature, LLM_IF_OAI_Chat, LLM_IF_OAI_Fn } from '~/common/stores/llms/llms.types';
+import { applyModelParameterInitialValues, FALLBACK_LLM_PARAM_TEMPERATURE } from '~/common/stores/llms/llms.parameters';
+import { isModelPricingFree } from '~/common/stores/llms/llms.pricing';
+import { llmsStoreActions } from '~/common/stores/llms/store-llms';
 
-import type { GenerateContextNameSchema, ModelDescriptionSchema, StreamingContextNameSchema } from './server/llm.server.types';
-import type { OpenAIWire } from './server/openai/openai.wiretypes';
-import type { StreamingClientUpdate } from './vendors/unifiedStreamingClient';
-import { DLLM, DLLMId, DModelSource, DModelSourceId, LLM_IF_OAI_Chat, LLM_IF_OAI_Fn, useModelsStore } from './store-llms';
-import { FALLBACK_LLM_TEMPERATURE } from './vendors/openai/openai.vendor';
-import { findAccessForSourceOrThrow, findVendorForLlmOrThrow } from './vendors/vendors.registry';
-
-
-// LLM Client Types
-// NOTE: Model List types in '../server/llm.server.types';
-
-export interface VChatMessageIn {
-  role: 'assistant' | 'system' | 'user'; // | 'function';
-  content: string;
-  //name?: string; // when role: 'function'
-}
-
-export type VChatFunctionIn = OpenAIWire.ChatCompletion.RequestFunctionDef;
-
-export type VChatStreamContextName = StreamingContextNameSchema;
-export type VChatGenerateContextName = GenerateContextNameSchema;
-export type VChatContextRef = string;
-
-export interface VChatMessageOut {
-  role: 'assistant' | 'system' | 'user';
-  content: string;
-  finish_reason: 'stop' | 'length' | null;
-}
-
-export interface VChatMessageOrFunctionCallOut extends VChatMessageOut {
-  function_name: string;
-  function_arguments: object | null;
-}
+import type { ModelDescriptionSchema } from './server/llm.server.types';
+import { findServiceAccessOrThrow } from './vendors/vendor.helpers';
 
 
-// LLM Client Functions
+// LLM Model Updates Client Functions
 
-export async function llmsUpdateModelsForSourceOrThrow(sourceId: DModelSourceId, keepUserEdits: boolean): Promise<{ models: ModelDescriptionSchema[] }> {
+export async function llmsUpdateModelsForServiceOrThrow(serviceId: DModelsServiceId, keepUserEdits: boolean): Promise<{ models: ModelDescriptionSchema[] }> {
 
   // get the access, assuming there's no client config and the server will do all
-  const { source, vendor, transportAccess } = findAccessForSourceOrThrow(sourceId);
+  const { service, vendor, transportAccess } = findServiceAccessOrThrow(serviceId);
 
   // fetch models
   const data = await vendor.rpcUpdateModelsOrThrow(transportAccess);
 
   // update the global models store
-  useModelsStore.getState().setLLMs(
-    data.models.map(model => modelDescriptionToDLLMOpenAIOptions(model, source)),
-    source.id,
-    true,
+  llmsStoreActions().setServiceLLMs(
+    service.id,
+    data.models.map(model => _createDLLMFromModelDescription(model, service)),
     keepUserEdits,
+    false,
   );
 
   // figure out which vendors are actually used and useful
   hasGoogleAnalytics && sendGAEvent('event', 'app_models_updated', {
-    app_models_source_id: source.id,
-    app_models_source_label: source.label,
+    app_models_source_id: service.id,
+    app_models_source_label: service.label,
     app_models_updated_count: data.models.length || 0,
     app_models_vendor_id: vendor.id,
     app_models_vendor_label: vendor.name,
@@ -68,111 +41,70 @@ export async function llmsUpdateModelsForSourceOrThrow(sourceId: DModelSourceId,
   return data;
 }
 
-function modelDescriptionToDLLMOpenAIOptions<TSourceSetup, TLLMOptions>(model: ModelDescriptionSchema, source: DModelSource<TSourceSetup>): DLLM<TSourceSetup, TLLMOptions> {
+const _fallbackInterfaces = [LLM_IF_OAI_Chat, LLM_IF_OAI_Fn];
+
+function _createDLLMFromModelDescription(d: ModelDescriptionSchema, service: DModelsService): DLLM {
 
   // null means unknown contenxt/output tokens
-  const contextTokens = model.contextWindow || null;
-  const maxOutputTokens = model.maxCompletionTokens || (contextTokens ? Math.round(contextTokens / 2) : null);
-  const llmResponseTokensRatio = model.maxCompletionTokens ? 1 : 1 / 4;
+  const contextTokens = d.contextWindow || null;
+  const maxOutputTokens = d.maxCompletionTokens || (contextTokens ? Math.round(contextTokens / 2) : null);
+  const llmResponseTokensRatio = d.maxCompletionTokens ? 1 : 1 / 4;
   const llmResponseTokens = maxOutputTokens ? Math.round(maxOutputTokens * llmResponseTokensRatio) : null;
 
-  return {
-    id: `${source.id}-${model.id}`,
+  // DLLM is a fundamental type in our application
+  const dllm: DLLM = {
+
+    // this id is Big-AGI specific, not the vendor's
+    id: !d.idVariant ? `${service.id}-${d.id}`
+      : `${service.id}-${d.id}-${d.idVariant}`,
 
     // editable properties
-    label: model.label,
-    created: model.created || 0,
-    updated: model.updated || 0,
-    description: model.description,
-    hidden: !!model.hidden,
-    // isEdited: false, // NOTE: this is set by the store on user edits
+    label: d.label,
+    created: d.created || 0,
+    updated: d.updated || 0,
+    description: d.description,
+    hidden: !!d.hidden,
 
     // hard properties
     contextTokens,
     maxOutputTokens,
-    trainingDataCutoff: model.trainingDataCutoff,
-    interfaces: model.interfaces?.length ? model.interfaces : [LLM_IF_OAI_Chat],
-    // inputTypes: ...
-    benchmark: model.benchmark,
-    pricing: model.pricing,
+    trainingDataCutoff: d.trainingDataCutoff,
+    interfaces: d.interfaces?.length ? d.interfaces : _fallbackInterfaces,
+    benchmark: d.benchmark,
+    // pricing: undefined, // set below, since it needs some adaptation
 
-    // derived properties
-    tmpIsFree: model.pricing?.chatIn === 0 && model.pricing?.chatOut === 0,
-    tmpIsVision: model.interfaces?.includes(LLM_IF_OAI_Chat) === true,
-
-    sId: source.id,
-    _source: source,
-
-    options: {
-      llmRef: model.id,
-      // @ts-ignore FIXME: large assumption that this is LLMOptionsOpenAI object
-      llmTemperature: FALLBACK_LLM_TEMPERATURE,
-      llmResponseTokens,
+    // parameters system (spec and initial values)
+    parameterSpecs: d.parameterSpecs?.length ? d.parameterSpecs : [],
+    initialParameters: {
+      llmRef: d.id, // this is the vendor model id
+      llmTemperature: d.interfaces.includes(LLM_IF_HOTFIX_NoTemperature) ? null : FALLBACK_LLM_PARAM_TEMPERATURE,
+      llmResponseTokens: llmResponseTokens,
     },
+
+    // references
+    sId: service.id,
+    vId: service.vId,
+
+    // user edited properties: not set
+    // userLabel: undefined,
+    // userHidden: undefined,
+    // userParameters: undefined,
   };
-}
 
+  // set other params from spec
+  if (dllm.parameterSpecs?.length)
+    applyModelParameterInitialValues(dllm.initialParameters, dllm.parameterSpecs, false);
 
-export async function llmChatGenerateOrThrow<TSourceSetup = unknown, TAccess = unknown, TLLMOptions = unknown>(
-  llmId: DLLMId,
-  messages: VChatMessageIn[],
-  contextName: VChatGenerateContextName,
-  contextRef: VChatContextRef | null,
-  functions: VChatFunctionIn[] | null,
-  forceFunctionName: string | null,
-  maxTokens?: number,
-): Promise<VChatMessageOut | VChatMessageOrFunctionCallOut> {
+  // set the pricing
+  if (d.chatPrice && typeof d.chatPrice === 'object') {
+    dllm.pricing = {
+      chat: {
+        ...d.chatPrice,
+        // compute the free status
+        _isFree: isModelPricingFree(d.chatPrice),
+      },
+    };
+  }
 
-  // id to DLLM and vendor
-  const { llm, vendor } = findVendorForLlmOrThrow<TSourceSetup, TAccess, TLLMOptions>(llmId);
-
-  // if the model does not support function calling and we're trying to force a function, throw
-  if (forceFunctionName && !llm.interfaces.includes(LLM_IF_OAI_Fn))
-    throw new Error(`Model ${llmId} does not support function calling`);
-
-  // FIXME: relax the forced cast
-  const options = llm.options as TLLMOptions;
-
-  // get the access
-  const partialSourceSetup = llm._source.setup;
-  const access = vendor.getTransportAccess(partialSourceSetup);
-
-  // get any vendor-specific rate limit delay
-  const delay = vendor.getRateLimitDelay?.(llm, partialSourceSetup) ?? 0;
-  if (delay > 0)
-    await new Promise(resolve => setTimeout(resolve, delay));
-
-  // execute via the vendor
-  return await vendor.rpcChatGenerateOrThrow(access, options, messages, contextName, contextRef, functions, forceFunctionName, maxTokens);
-}
-
-
-export async function llmStreamingChatGenerate<TSourceSetup = unknown, TAccess = unknown, TLLMOptions = unknown>(
-  llmId: DLLMId,
-  messages: VChatMessageIn[],
-  contextName: VChatStreamContextName,
-  contextRef: VChatContextRef,
-  functions: VChatFunctionIn[] | null,
-  forceFunctionName: string | null,
-  abortSignal: AbortSignal,
-  onUpdate: (update: StreamingClientUpdate, done: boolean) => void,
-): Promise<void> {
-
-  // id to DLLM and vendor
-  const { llm, vendor } = findVendorForLlmOrThrow<TSourceSetup, TAccess, TLLMOptions>(llmId);
-
-  // FIXME: relax the forced cast
-  const llmOptions = llm.options as TLLMOptions;
-
-  // get the access
-  const partialSourceSetup = llm._source.setup;
-  const access = vendor.getTransportAccess(partialSourceSetup); // as ChatStreamInputSchema['access'];
-
-  // get any vendor-specific rate limit delay
-  const delay = vendor.getRateLimitDelay?.(llm, partialSourceSetup) ?? 0;
-  if (delay > 0)
-    await new Promise(resolve => setTimeout(resolve, delay));
-
-  // execute via the vendor
-  return await vendor.streamingChatGenerateOrThrow(access, llmId, llmOptions, messages, contextName, contextRef, functions, forceFunctionName, abortSignal, onUpdate);
+  return dllm;
 }

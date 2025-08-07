@@ -14,6 +14,7 @@ import { PerplexityIcon } from '~/common/components/icons/vendors/PerplexityIcon
 
 import { Brand } from '~/common/app.config';
 import { Link } from '~/common/components/Link';
+import { Release } from '~/common/app.release';
 import { clientUtmSource } from '~/common/util/pwaUtils';
 import { platformAwareKeystrokes } from '~/common/components/KeyStroke';
 
@@ -51,17 +52,33 @@ interface NewsItem {
 
 // news and feature surfaces
 export const NewsItems: NewsItem[] = [
-  /*{
-    versionCode: '1.17.0',
+  /* {
+    versionCode: Release.App.versionCode,
+    versionName: Release.App.versionName,
+    versionDate: new Date('2024-10-15T01:00:00Z'),
     items: [
-      Screen Capture (when removed from labs)
-      Auto-Merge
-      Draw
-      ...
-    ]
-  }*/
+      { text: <>You&apos;re running an <B>unsupported Early Access</B> build of Big-AGI V2. This version is used by developers to implement long-term breaking features.</> },
+      { text: <>This branch previews experimental features that are subject to change and may break without notice.</> },
+      { text: <>Please report screenshots of breakages and console error messages.</> },
+      { text: <>Please note that this is not the official release.</> },
+      { text: <>For stable releases: <ExternalLink href='https://big-agi.com'>big-agi.com</ExternalLink>.</> },
+    ],
+  }, */
   {
-    versionCode: '1.16.8',
+    versionCode: Release.App.versionCode,
+    versionName: Release.App.versionName,
+    versionDate: new Date('2024-10-15T01:00:00Z'),
+    items: [
+      { text: <>You&apos;re running an unsupported <B>develpers build</B> of Big-AGI 2. This branch carries breaking features that are subject to change and may break.</> },
+      { text: <><B>dev-branch:</B> LFS, Apply, MM-reAct, fu-Chart, fu-UI, fu-Diagram, C-fixes</> },
+      { text: <><B>big-agi-2:</B> partial list of changes <ExternalLink href='https://github.com/enricoros/big-AGI/issues/567'>here</ExternalLink></> },
+      { text: <>Please report screenshots of breakages and console error messages.</> },
+      { text: <>2,000+ changes, 60,000+ lines of code changed vs. 1.16</> },
+      { text: <>Do not use, no cloud backups, <ExternalLink href='https://big-agi.com'>stable version here</ExternalLink>.</> },
+    ],
+  },
+  {
+    versionCode: '1.16.9',
     versionName: 'Crystal Clear',
     versionDate: new Date('2024-06-07T05:00:00Z'),
     // versionDate: new Date('2024-05-13T19:00:00Z'),
@@ -85,7 +102,8 @@ export const NewsItems: NewsItem[] = [
       { text: <>1.16.6: Groq <B>Llama 3.1</B> support</> },
       { text: <>1.16.7: Gpt-4o <B>2024-08-06</B></> },
       { text: <>1.16.8: <B>ChatGPT-4o</B> latest</> },
-      { text: <>OpenAI <B>o1</B> and newer models require Big-AGI 2. <B href='https://y2rjg0zillz.typeform.com/to/FDggwwZv?utm_source=github&utm_medium=news116&utm_campaign=ba20'>Sign up here</B></> },
+      { text: <>1.16.9: <B>Gemini</B> fixes</> },
+      { text: <>OpenAI <B>o1</B>, DeepSeek R1, and newer models require Big-AGI 2. <B href='https://y2rjg0zillz.typeform.com/to/ZSADpr5u?utm_source=gh-2&utm_medium=news&utm_campaign=ea2'>Sign up here</B></> },
     ],
   },
   {
@@ -142,7 +160,7 @@ export const NewsItems: NewsItem[] = [
   {
     versionCode: '1.12',
     versionName: 'AGI Hotline',
-    versionMoji: '✨🗣️',
+    // versionMoji: '✨🗣️',
     versionDate: new Date('2024-01-26T12:30:00Z'),
     versionCoverImage: coverV112,
     items: [
@@ -231,7 +249,7 @@ export const NewsItems: NewsItem[] = [
       { text: <>Enhanced security via <B code='/docs/deploy-authentication.md'>password protection</B></> },
       { text: <>{platformAwareKeystrokes('Ctrl+Shift+O')}: quick access to model options</> },
       { text: <>Optimized voice input and performance</> },
-      { text: <>Latest Ollama and Oobabooga models</> },
+      { text: <>Latest Ollama models</> },
     ],
   },
   {
@@ -260,7 +278,6 @@ export const NewsItems: NewsItem[] = [
       { text: <><B issue={194}>Text Tools</B> including highlight differences</> },
       { text: <><B href='https://mermaid.js.org/'>Mermaid</B> Diagramming Rendering</> },
       { text: <><B>OpenAI 1106</B> Chat Models</> },
-      { text: <><B>SDXL</B> support with Prodia</> },
       { text: <>Cloudflare OpenAI API Gateway</> },
       { text: <>Helicone for Anthropic</> },
     ],
@@ -292,7 +309,6 @@ export const NewsItems: NewsItem[] = [
       { text: <><B>Flattener</B> - 4-mode conversations summarizer</> },
       { text: <><B>Forking</B> - branch your conversations</> },
       { text: <><B>/s</B> and <B>/a</B> to append a <i>system</i> or <i>assistant</i> message</> },
-      { text: <>Local LLMs with <B code='/docs/config-local-oobabooga.md'>Oobabooga server</B></> },
       { text: 'NextJS STOP bug.. squashed, with Vercel!' },
     ],
   },
@@ -328,8 +344,10 @@ function B(props: {
   );
   if (!href)
     return boldText;
+  // append UTM details if missing
+  const hrefWithUtm = href.includes('utm_source=') ? href : href + clientUtmSource();
   return (
-    <ExternalLink href={href + clientUtmSource()} highlight={props.wow} icon={props.issue ? 'issue' : undefined}>
+    <ExternalLink href={hrefWithUtm} highlight={props.wow} icon={props.issue ? 'issue' : undefined}>
       {boldText}
     </ExternalLink>
   );

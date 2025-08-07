@@ -19,7 +19,7 @@ export interface CapabilityBrowserSpeechRecognition {
   warnings: string[];
 }
 
-export { browserSpeechRecognitionCapability as useCapabilityBrowserSpeechRecognition } from './useSpeechRecognition';
+export { browserSpeechRecognitionCapability as useCapabilityBrowserSpeechRecognition } from './speechrecognition/useSpeechRecognition';
 
 
 /// Speech Synthesis: ElevenLabs
@@ -36,16 +36,26 @@ export { useCapability as useCapabilityElevenLabs } from '~/modules/elevenlabs/e
 /// Image Generation
 
 export interface TextToImageProvider {
-  id: string;             // e.g. 'openai-2' or 'localai'
-  label: string;          // e.g. 'OpenAI #2'
-  painter: string;        // e.g. 'DALL·E' or 'Prodia'
+  providerId: string;                 // unique ID of this provider, used for selecting in a list (e.g. 'openai-2' or 'localai')
+  vendor: TextToImageVendor;
+  // UI attributes
+  label: string;              // e.g. 'OpenAI #2'
+  painter: string;            // e.g. 'GPT Image', 'DALL·E', 'Grok', ...
   description: string;
   configured: boolean;
-  vendor: 'localai' | 'openai' | 'prodia';
 }
+
+type TextToImageVendor =
+  | 'gemini'
+  | 'localai'
+  | 'openai'
+  | 'xai'
+  ;
+
 
 export interface CapabilityTextToImage {
   mayWork: boolean;
+  mayEdit: boolean;
   providers: TextToImageProvider[],
   activeProviderId: string | null;
   setActiveProviderId: (providerId: string | null) => void;
@@ -61,7 +71,6 @@ export interface CapabilityBrowsing {
   isServerConfig: boolean;
   isClientConfig: boolean;
   isClientValid: boolean;
-  inCommand: boolean;
   inComposer: boolean;
   inReact: boolean;
   inPersonas: boolean;
