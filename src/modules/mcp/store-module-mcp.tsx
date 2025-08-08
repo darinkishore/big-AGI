@@ -26,6 +26,9 @@ interface MCPStore {
   // Tools
   availableTools: Map<string, MCPTool[]>; // serverId -> tools
   refreshTools: (serverId: string) => Promise<void>;
+
+  // Optional helper: bulk import servers from a JSON file (e.g., ~/.cursor/mcp.json)
+  loadServersFromConfig?: (configPath?: string) => Promise<number>;
 }
 
 export const useMCPStore = create<MCPStore>()(
@@ -147,6 +150,27 @@ export const useMCPStore = create<MCPStore>()(
           });
         } catch (error) {
           console.error(`Failed to refresh tools for ${serverId}:`, error);
+        }
+      },
+
+      // Add servers from a JSON config without enabling them
+      loadServersFromConfig: async (configPath?: string) => {
+        try {
+          const { apiAsyncNode } = await import('~/common/util/trpc.client');
+          const result = await apiAsyncNode.mcp.getServersFromConfig.query({ path: configPath });
+          const serversToAdd = (result.servers || []).map((s: any) => ({ id: s.id, name: s.id, config: s.config, enabled: false }));
+          if (!serversToAdd.length) return 0;
+          let added = 0;
+          set((state) => {
+            const existingIds = new Set(state.servers.map(s => s.id));
+            const newOnes = serversToAdd.filter(s => !existingIds.has(s.id));
+            added = newOnes.length;
+            return { servers: [...state.servers, ...newOnes] };
+          });
+          return added;
+        } catch (e) {
+          console.error('Failed to load MCP servers from config', e);
+          return 0;
         }
       },
     }),

@@ -19,6 +19,7 @@ export function MCPSettings() {
   useMCPLogBridge();
   
   const { servers, addServer, updateServer, removeServer, connectServer, disconnectServer, connections, availableTools } = useMCPStore();
+  const loadFromConfig = useMCPStore((s) => s.loadServersFromConfig);
   const { data: presets } = useMCPServerPresets();
   const validateMutation = useValidateMCPServer();
 
@@ -27,15 +28,24 @@ export function MCPSettings() {
   const [selectedPreset, setSelectedPreset] = React.useState<string>('');
 
   const handleAddServer = React.useCallback(() => {
-    if (!newServerName || !newServerCommand) return;
+    if (!newServerName) return;
 
     const serverId = `mcp-${Date.now()}`;
-    const config: MCPServerConfig = {
-      command: newServerCommand,
-      args: [],
-      env: {},
-      transport: 'stdio',
-    };
+
+    // If a preset is selected, use its full config (command, args, env, transport); otherwise, use the minimal custom command
+    let config: MCPServerConfig;
+    const preset = presets?.presets?.find((p: any) => p.id === selectedPreset);
+    if (preset) {
+      config = preset.config as MCPServerConfig;
+    } else {
+      if (!newServerCommand) return; // need a command for custom servers
+      config = {
+        command: newServerCommand,
+        args: [],
+        env: {},
+        transport: 'stdio',
+      } as MCPServerConfig;
+    }
 
     addServer({
       id: serverId,
@@ -47,15 +57,16 @@ export function MCPSettings() {
     setNewServerName('');
     setNewServerCommand('');
     setSelectedPreset('');
-  }, [newServerName, newServerCommand, addServer]);
+  }, [newServerName, newServerCommand, selectedPreset, presets, addServer]);
 
   const handlePresetChange = React.useCallback((value: string | null) => {
     if (!value || !presets) return;
-    
+
     const preset = presets.presets.find((p: any) => p.id === value);
     if (preset) {
       setSelectedPreset(value);
       setNewServerName(preset.name);
+      // Show just the command for visibility; args/env come from the preset when adding
       setNewServerCommand(preset.config.command);
     }
   }, [presets]);
@@ -100,6 +111,16 @@ export function MCPSettings() {
         </Typography>
         
         <Stack spacing={2}>
+          {loadFromConfig && (
+            <Box>
+              <Stack direction='row' spacing={1} alignItems='center'>
+                <Button size='sm' variant='soft' onClick={async () => { await loadFromConfig(); }}>
+                  Import from ~/.cursor/mcp.json
+                </Button>
+              </Stack>
+              <FormHelperText>Loads server definitions from standard MCP config JSON.</FormHelperText>
+            </Box>
+          )}
           {presets && (
             <FormControl>
               <FormLabel>Preset</FormLabel>
