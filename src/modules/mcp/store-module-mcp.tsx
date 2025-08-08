@@ -33,7 +33,7 @@ interface MCPStore {
 
 export const useMCPStore = create<MCPStore>()(
   persist(
-    (set, get) => {
+    (set, get): MCPStore => {
       // Cache presets to avoid repeated fetches
       let presetsCache: Array<{ id: string; name: string; config: MCPServerConfig }> | null = null;
 
@@ -67,10 +67,10 @@ export const useMCPStore = create<MCPStore>()(
         } as MCPServerConfig;
       }
 
-      return ({
+      return {
       servers: [],
-      connections: new Map(),
-      availableTools: new Map(),
+      connections: new Map<string, MCPConnection>(),
+      availableTools: new Map<string, MCPTool[]>(),
 
       addServer: (server) => {
         set((state) => ({
@@ -218,9 +218,9 @@ export const useMCPStore = create<MCPStore>()(
     },
     {
       name: 'mcp-store',
-      partialize: (state) => ({
+      partialize: (state: MCPStore) => ({
         servers: state.servers,
       }),
-    }
-  )
+    },
+  ),
 );
