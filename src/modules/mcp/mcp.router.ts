@@ -74,7 +74,7 @@ function applyPresetDefaults(serverId: string, config: z.infer<typeof mcpServerC
   const preset = getPresets().find((p) => p.id === serverId);
   if (!preset) return config;
   const mergedEnv = { ...(preset.config.env || {}), ...(config.env || {}) } as Record<string, string>;
-  const args = (config.args && config.args.length > 0) ? config.args : preset.config.args;
+  const args = config.args && config.args.length > 0 ? config.args : preset.config.args;
   return {
     command: config.command || preset.config.command,
     args,

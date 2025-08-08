@@ -215,7 +215,7 @@ export const useMCPStore = create<MCPStore>()(
           return 0;
         }
       },
-    });
+    },
     {
       name: 'mcp-store',
       partialize: (state) => ({
