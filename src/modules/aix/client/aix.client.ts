@@ -11,7 +11,7 @@ import {
   LLM_IF_Outputs_Image,
   LLM_IF_Outputs_NoText,
 } from '~/common/stores/llms/llms.types';
-import { apiStream } from '~/common/util/trpc.client';
+import { apiAsyncNode, apiStream } from '~/common/util/trpc.client';
 import { DMetricsChatGenerate_Lg, metricsChatGenerateLgToMd, metricsComputeChatGenerateCostsMd } from '~/common/stores/metrics/metrics.chatgenerate';
 import { DModelParameterValues, getAllModelParameterValues } from '~/common/stores/llms/llms.parameters';
 import {
@@ -40,6 +40,8 @@ import {
 } from './aix.client.chatGenerateRequest';
 import { ContentReassembler } from './ContentReassembler';
 import { withDecimator } from './withDecimator';
+import { mcpToolToFunctionDef } from '~/modules/mcp';
+import type { MCPTool } from '~/modules/mcp/types/mcp.types';
 
 // configuration
 export const DEBUG_PARTICLES = false;
@@ -194,6 +196,16 @@ export async function aixChatGenerateContent_DMessage_FromConversation(
       systemMessage: await aixCGR_SystemMessage_FromDMessageOrThrow(chatSystemInstruction),
       chatSequence: await aixCGR_ChatSequence_FromDMessagesOrThrow(chatHistoryWithoutSystemMessages),
     };
+
+    // Wire in MCP tools if any connected servers are available. Fail-soft if anything goes wrong.
+    try {
+      const connected = await apiAsyncNode.mcp.getConnectedServers.query();
+      const toolDefs = connected.servers.flatMap(({ serverId, tools }) => _mapMCPToolsToAix(tools, serverId));
+      if (toolDefs.length) (aixChatContentGenerateRequest as any).tools = toolDefs;
+    } catch (err) {
+      // Do not block normal chat if MCP is unavailable
+      if (AIX_CLIENT_DEV_ASSERTS) console.warn('[DEV] AIX: MCP tools unavailable or failed to load. Continuing without tools.', err);
+    }
 
     await aixChatGenerateContent_DMessage(
       llmId,
@@ -354,6 +366,17 @@ export async function aixChatGenerateText_Simple(
   await onTextStreamUpdate?.(state.text, true, state.generator);
 
   return state.text;
+}
+
+/**
+ * Converts MCP tools to AIX function-call tool definitions with the mcp_ prefix naming convention.
+ */
+function _mapMCPToolsToAix(mcpTools: MCPTool[], serverId: string) {
+  try {
+    return mcpTools.map((tool) => mcpToolToFunctionDef(tool, serverId));
+  } catch (_e) {
+    return [];
+  }
 }
 
 /**

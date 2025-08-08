@@ -11,7 +11,8 @@ export type SystemPurposeId =
   | 'DeveloperPreview'
   | 'Executive'
   | 'Generic'
-  | 'YouTubeTranscriber';
+  | 'YouTubeTranscriber'
+  | 'Agentic';
 
 export const defaultSystemPurposeId: SystemPurposeId = 'Generic';
 
@@ -31,6 +32,14 @@ export type SystemPurposeData = {
 export type SystemPurposeExample = string | { prompt: string; action?: 'require-data-attachment' };
 
 export const SystemPurposes: { [key in SystemPurposeId]: SystemPurposeData } = {
+  Agentic: {
+    title: 'Agentic',
+    description: 'Autonomous tool-using agent (MCP-enabled)',
+    systemMessage: `You are an autonomous assistant that can decide when to use tools to complete tasks. When tools are available, use them iteratively until the objective is achieved or no further tool use is beneficial. Prefer minimal, relevant tool calls. Provide concise updates; focus on final results.`,
+    symbol: '🧩',
+    examples: ['search the repo for auth logic and summarize', 'read /tmp/hello.txt and tell me the contents', 'list repo files and propose refactors'],
+    call: { starters: ['Agent ready. What shall I do?', 'Standing by to act.', 'What is the goal?'] },
+  },
   Generic: {
     title: 'Default',
     description: 'Start here',
