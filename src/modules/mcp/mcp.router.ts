@@ -25,6 +25,64 @@ const mcpToolCallSchema = z.object({
 // Get the singleton connection manager instance
 const connectionManager = MCPConnectionManager.getInstance();
 
+// Presets and helpers to merge default args/env/transport when users provide partial configs
+function getPresets() {
+  return [
+    {
+      id: 'filesystem',
+      name: 'Filesystem (Read/Write Files)',
+      config: {
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
+        transport: 'stdio' as const,
+      },
+    },
+    {
+      id: 'github',
+      name: 'GitHub (Browse Repos)',
+      config: {
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-github'],
+        transport: 'stdio' as const,
+        env: {
+          GITHUB_TOKEN: process.env.GITHUB_TOKEN || '',
+        },
+      },
+    },
+    {
+      id: 'sqlite',
+      name: 'SQLite (Database Queries)',
+      config: {
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-sqlite', '--db-path', '/tmp/test.db'],
+        transport: 'stdio' as const,
+      },
+    },
+    {
+      id: 'puppeteer',
+      name: 'Web Browser (Puppeteer)',
+      config: {
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-puppeteer'],
+        transport: 'stdio' as const,
+      },
+    },
+  ];
+}
+
+function applyPresetDefaults(serverId: string, config: z.infer<typeof mcpServerConfigSchema>): z.infer<typeof mcpServerConfigSchema> {
+  const preset = getPresets().find((p) => p.id === serverId);
+  if (!preset) return config;
+  const mergedEnv = { ...(preset.config.env || {}), ...(config.env || {}) } as Record<string, string>;
+  const args = (config.args && config.args.length > 0) ? config.args : preset.config.args;
+  return {
+    command: config.command || preset.config.command,
+    args,
+    env: Object.keys(mergedEnv).length ? mergedEnv : undefined,
+    transport: config.transport || preset.config.transport,
+  };
+}
+
 export const mcpRouter = createTRPCRouter({
   /**
    * List available MCP tools from a server
@@ -38,8 +96,9 @@ export const mcpRouter = createTRPCRouter({
     )
     .query(async ({ input }): Promise<{ tools: MCPTool[] }> => {
       try {
-        // Connect to the server if not already connected
-        const connection = await connectionManager.connect(input.serverId, input.config);
+        // Apply preset defaults (fills args/env/transport if omitted)
+        const cfg = applyPresetDefaults(input.serverId, input.config);
+        const connection = await connectionManager.connect(input.serverId, cfg);
         return { tools: connection.tools };
       } catch (error) {
         throw new TRPCError({
@@ -79,8 +138,8 @@ export const mcpRouter = createTRPCRouter({
     .mutation(async ({ input }): Promise<{ valid: boolean; error?: string }> => {
       const testServerId = `test-${Date.now()}`;
       try {
-        // Try to connect to the server
-        await connectionManager.connect(testServerId, input.config);
+        const cfg = applyPresetDefaults(testServerId.replace(/^test-/, ''), input.config);
+        await connectionManager.connect(testServerId, cfg);
         // If successful, disconnect immediately
         await connectionManager.disconnect(testServerId);
         return { valid: true };
@@ -97,48 +156,7 @@ export const mcpRouter = createTRPCRouter({
    */
   getServerPresets: publicProcedure.query(
     async (): Promise<{ presets: Array<{ id: string; name: string; config: z.infer<typeof mcpServerConfigSchema> }> }> => {
-      // Return some common MCP server presets
-      const presets = [
-        {
-          id: 'filesystem',
-          name: 'Filesystem (Read/Write Files)',
-          config: {
-            command: 'npx',
-            args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
-            transport: 'stdio' as const,
-          },
-        },
-        {
-          id: 'github',
-          name: 'GitHub (Browse Repos)',
-          config: {
-            command: 'npx',
-            args: ['-y', '@modelcontextprotocol/server-github'],
-            transport: 'stdio' as const,
-            env: {
-              GITHUB_TOKEN: process.env.GITHUB_TOKEN || '',
-            },
-          },
-        },
-        {
-          id: 'sqlite',
-          name: 'SQLite (Database Queries)',
-          config: {
-            command: 'npx',
-            args: ['-y', '@modelcontextprotocol/server-sqlite', '--db-path', '/tmp/test.db'],
-            transport: 'stdio' as const,
-          },
-        },
-        {
-          id: 'puppeteer',
-          name: 'Web Browser (Puppeteer)',
-          config: {
-            command: 'npx',
-            args: ['-y', '@modelcontextprotocol/server-puppeteer'],
-            transport: 'stdio' as const,
-          },
-        },
-      ];
+      const presets = getPresets();
       return { presets };
     },
   ),
@@ -240,7 +258,8 @@ export const mcpRouter = createTRPCRouter({
     )
     .mutation(async ({ input }): Promise<{ success: boolean; error?: string }> => {
       try {
-        await connectionManager.connect(input.serverId, input.config);
+        const cfg = applyPresetDefaults(input.serverId, input.config);
+        await connectionManager.connect(input.serverId, cfg);
         return { success: true };
       } catch (error) {
         return {

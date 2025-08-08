@@ -33,7 +33,41 @@ interface MCPStore {
 
 export const useMCPStore = create<MCPStore>()(
   persist(
-    (set, get) => ({
+    (set, get) => {
+      // Cache presets to avoid repeated fetches
+      let presetsCache: Array<{ id: string; name: string; config: MCPServerConfig }> | null = null;
+
+      async function getPresetsOrFetch(): Promise<Array<{ id: string; name: string; config: MCPServerConfig }>> {
+        if (presetsCache) return presetsCache;
+        try {
+          const { apiAsyncNode } = await import('~/common/util/trpc.client');
+          const res = await apiAsyncNode.mcp.getServerPresets.query();
+          presetsCache = res.presets as Array<{ id: string; name: string; config: MCPServerConfig }>;
+          return presetsCache;
+        } catch (e) {
+          console.warn('[MCP] Failed to load presets', e);
+          presetsCache = [];
+          return presetsCache;
+        }
+      }
+
+      async function mergeDefaultsFromPreset(serverId: string, name: string, config: MCPServerConfig): Promise<MCPServerConfig> {
+        const presets = await getPresetsOrFetch();
+        const matchById = presets.find(p => p.id === serverId);
+        const matchByName = presets.find(p => p.name.toLowerCase() === (name || '').toLowerCase());
+        const preset = matchById || matchByName;
+        if (!preset) return config;
+        const mergedEnv = { ...(preset.config.env || {}), ...(config.env || {}) } as Record<string, string>;
+        const args = (config.args && config.args.length > 0) ? config.args : preset.config.args;
+        return {
+          command: config.command || preset.config.command,
+          args,
+          env: Object.keys(mergedEnv).length ? mergedEnv : undefined,
+          transport: config.transport || preset.config.transport,
+        } as MCPServerConfig;
+      }
+
+      return ({
       servers: [],
       connections: new Map(),
       availableTools: new Map(),
@@ -72,10 +106,15 @@ export const useMCPStore = create<MCPStore>()(
         try {
           // Use server-side connection through TRPC
           const { apiAsyncNode } = await import('~/common/util/trpc.client');
-          const result = await apiAsyncNode.mcp.connectServer.mutate({
-            serverId,
-            config: server.config,
-          });
+          // Merge defaults from presets if args/env/transport are missing
+          const effectiveConfig = await mergeDefaultsFromPreset(serverId, server.name, server.config);
+          // persist merged config locally to avoid future empty-args
+          if (effectiveConfig !== server.config) {
+            set((state) => ({
+              servers: state.servers.map(s => s.id === serverId ? { ...s, config: effectiveConfig } : s),
+            }));
+          }
+          const result = await apiAsyncNode.mcp.connectServer.mutate({ serverId, config: effectiveConfig });
 
           if (!result.success) {
             throw new Error(result.error || 'Failed to connect');
@@ -138,10 +177,13 @@ export const useMCPStore = create<MCPStore>()(
         try {
           // Use server-side tool listing through TRPC
           const { apiAsyncNode } = await import('~/common/util/trpc.client');
-          const result = await apiAsyncNode.mcp.listTools.query({
-            serverId,
-            config: server.config,
-          });
+          const effectiveConfig = await mergeDefaultsFromPreset(serverId, server.name, server.config);
+          if (effectiveConfig !== server.config) {
+            set((state) => ({
+              servers: state.servers.map(s => s.id === serverId ? { ...s, config: effectiveConfig } : s),
+            }));
+          }
+          const result = await apiAsyncNode.mcp.listTools.query({ serverId, config: effectiveConfig });
           
           set((state) => {
             const newTools = new Map(state.availableTools);
@@ -173,7 +215,7 @@ export const useMCPStore = create<MCPStore>()(
           return 0;
         }
       },
-    }),
+    });
     {
       name: 'mcp-store',
       partialize: (state) => ({
