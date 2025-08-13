@@ -2,7 +2,6 @@ import * as z from 'zod/v4';
 
 import { LLMS_ALL_INTERFACES } from '~/common/stores/llms/llms.types';
 
-
 export type ModelDescriptionSchema = z.infer<typeof ModelDescription_schema>;
 
 // export namespace AixWire_API_ListModels {
@@ -11,7 +10,6 @@ export type ModelDescriptionSchema = z.infer<typeof ModelDescription_schema>;
  * Note: this needs to be moved to the AixWire_API_ListModels namespace
  * HOWEVER if we did it now there will be some circular dependency issue
  */
-
 
 /// Benchmark
 
@@ -22,7 +20,6 @@ const BenchmarksScores_schema = z.object({
   // vqaMmmu: z.number().optional(), // Visual Question Answering, MMMU, 0-shot
 });
 
-
 /// Pricing
 
 const PricePerMToken_schema = z.number().or(z.literal('free'));
@@ -32,10 +29,7 @@ const PriceUpTo_schema = z.object({
   price: PricePerMToken_schema,
 });
 
-const TieredPricing_schema = z.union([
-  PricePerMToken_schema,
-  z.array(PriceUpTo_schema),
-]);
+const TieredPricing_schema = z.union([PricePerMToken_schema, z.array(PriceUpTo_schema)]);
 
 // NOTE: (!) keep this in sync with DPricingChatGenerate (llms.pricing.ts)
 const PricingChatGenerate_schema = z.object({
@@ -43,23 +37,24 @@ const PricingChatGenerate_schema = z.object({
   output: TieredPricing_schema.optional(),
   // Future: Perplexity has a cost per request, consider this for future additions
   // perRequest: z.number().optional(), // New field for fixed per-request pricing
-  cache: z.discriminatedUnion('cType', [
-    z.object({
-      cType: z.literal('ant-bp'), // [Anthropic] Breakpoint-based caching
-      read: TieredPricing_schema,
-      write: TieredPricing_schema,
-      duration: z.number(),
-    }),
-    z.object({
-      cType: z.literal('oai-ac'), // [OpenAI] Automatic Caching
-      read: TieredPricing_schema,
-      // write: TieredPricing_schema, // Not needed, as it's the same as input cost, i.e. = 0
-    }),
-  ]).optional(),
+  cache: z
+    .discriminatedUnion('cType', [
+      z.object({
+        cType: z.literal('ant-bp'), // [Anthropic] Breakpoint-based caching
+        read: TieredPricing_schema,
+        write: TieredPricing_schema,
+        duration: z.number(),
+      }),
+      z.object({
+        cType: z.literal('oai-ac'), // [OpenAI] Automatic Caching
+        read: TieredPricing_schema,
+        // write: TieredPricing_schema, // Not needed, as it's the same as input cost, i.e. = 0
+      }),
+    ])
+    .optional(),
   // Not for the server-side, computed on the client only
   // _isFree: z.boolean().optional(),
 });
-
 
 /// Model Description (out)
 const ModelParameterSpec_schema = z.object({
@@ -82,6 +77,7 @@ const ModelParameterSpec_schema = z.object({
     'llmVndOaiRestoreMarkdown',
     'llmVndOaiWebSearchContext',
     'llmVndOaiWebSearchGeolocation',
+    'llmVndOaiTextVerbosity',
     'llmVndPerplexityDateFilter',
     'llmVndPerplexitySearchMode',
     'llmVndXaiSearchMode',
@@ -113,7 +109,6 @@ export const ModelDescription_schema = z.object({
   hidden: z.boolean().optional(),
   // TODO: add inputTypes/Kinds..
 });
-
 
 /// ListModels Response
 

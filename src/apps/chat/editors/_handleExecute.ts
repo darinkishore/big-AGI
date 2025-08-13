@@ -4,7 +4,13 @@ import type { DConversationId } from '~/common/stores/chat/chat.conversation';
 import type { DMessage } from '~/common/stores/chat/chat.message';
 import { ConversationHandler } from '~/common/chat-overlay/ConversationHandler';
 import { ConversationsManager } from '~/common/chat-overlay/ConversationsManager';
-import { createTextContentFragment, isContentOrAttachmentFragment, isImageRefPart, isTextContentFragment, isZyncAssetImageReferencePart } from '~/common/stores/chat/chat.fragments';
+import {
+  createTextContentFragment,
+  isContentOrAttachmentFragment,
+  isImageRefPart,
+  isTextContentFragment,
+  isZyncAssetImageReferencePart,
+} from '~/common/stores/chat/chat.fragments';
 import { getConversationSystemPurposeId } from '~/common/stores/chat/store-chats';
 
 import type { ChatExecuteMode } from '../execute-mode/execute-mode.types';
@@ -12,15 +18,12 @@ import { textToDrawCommand } from '../commands/CommandsDraw';
 
 import { _handleExecuteCommand, RET_NO_CMD } from './_handleExecuteCommand';
 import { runImageGenerationUpdatingState } from './image-generate';
-import { runPersonaOnConversationHead } from './chat-persona';
+import { runAgenticOnConversationHead, runPersonaOnConversationHead } from './chat-persona';
 import { runReActUpdatingState } from './react-tangent';
 
-
 export async function _handleExecute(chatExecuteMode: ChatExecuteMode, conversationId: DConversationId, executeCallerNameDebug: string) {
-
   // Handle missing conversation
-  if (!conversationId)
-    return 'err-no-conversation';
+  if (!conversationId) return 'err-no-conversation';
 
   const chatLLMId = getChatLLMId();
   const cHandler = ConversationsManager.getHandler(conversationId);
@@ -40,18 +43,14 @@ export async function _handleExecute(chatExecuteMode: ChatExecuteMode, conversat
   // re-read it from the store, such as with `cHandler.historyView()`
   cHandler.historyReplace(_inplaceEditableHistory);
 
-
   // Handle unconfigured
-  if (!chatLLMId || !chatExecuteMode)
-    return !chatLLMId ? 'err-no-chatllm' : 'err-no-chatmode';
+  if (!chatLLMId || !chatExecuteMode) return !chatLLMId ? 'err-no-chatllm' : 'err-no-chatmode';
 
   // handle missing last user message (or fragment)
   // note that we use the initial history, as the user message could have been displaced on the edited versions
   const lastMessage = initialHistory.length >= 1 ? initialHistory.slice(-1)[0] : null;
   const firstFragment = lastMessage?.fragments[0];
-  if (!lastMessage || !firstFragment)
-    return 'err-no-last-message';
-
+  if (!lastMessage || !firstFragment) return 'err-no-last-message';
 
   // execute a command, if the last message has one
   if (lastMessage.role === 'user') {
@@ -69,6 +68,9 @@ export async function _handleExecute(chatExecuteMode: ChatExecuteMode, conversat
   // synchronous long-duration tasks, which update the state as they go
   switch (chatExecuteMode) {
     case 'generate-content':
+      // If the active persona is the Agentic one, run the agentic loop; otherwise, standard chat
+      const purposeId = getConversationSystemPurposeId(conversationId);
+      if (purposeId === 'Agentic') return await runAgenticOnConversationHead(chatLLMId, conversationId);
       return await runPersonaOnConversationHead(chatLLMId, conversationId);
 
     case 'beam-content':
@@ -81,23 +83,20 @@ export async function _handleExecute(chatExecuteMode: ChatExecuteMode, conversat
 
     case 'generate-image':
       // verify we were called with a single DMessageTextContent
-      if (!isTextContentFragment(firstFragment))
-        return false;
+      if (!isTextContentFragment(firstFragment)) return false;
       const imagePrompt = firstFragment.part.text;
       cHandler.messageFragmentReplace(lastMessage.id, firstFragment.fId, createTextContentFragment(textToDrawCommand(imagePrompt)), true);
 
       // use additional image fragments as image inputs
-      const imageInputFragments = lastMessage.fragments.slice(1)
-        .filter(fragment => isContentOrAttachmentFragment(fragment) && (
-          isZyncAssetImageReferencePart(fragment.part) || isImageRefPart(fragment.part)
-        ));
+      const imageInputFragments = lastMessage.fragments
+        .slice(1)
+        .filter((fragment) => isContentOrAttachmentFragment(fragment) && (isZyncAssetImageReferencePart(fragment.part) || isImageRefPart(fragment.part)));
 
       return await runImageGenerationUpdatingState(cHandler, imagePrompt, imageInputFragments);
 
     case 'react-content':
       // verify we were called with a single DMessageTextContent
-      if (!isTextContentFragment(firstFragment))
-        return false;
+      if (!isTextContentFragment(firstFragment)) return false;
       const reactPrompt = firstFragment.part.text;
       cHandler.messageFragmentReplace(lastMessage.id, firstFragment.fId, createTextContentFragment(`/react ${reactPrompt}`), true);
       return await runReActUpdatingState(cHandler, reactPrompt, chatLLMId, lastMessage.id);

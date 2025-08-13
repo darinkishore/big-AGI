@@ -13,17 +13,14 @@
  * @module llms
  */
 
-
 // shared constants
 export const FALLBACK_LLM_PARAM_RESPONSE_TOKENS = 4096;
 export const FALLBACK_LLM_PARAM_TEMPERATURE = 0.5;
 // const FALLBACK_LLM_PARAM_REF_UNKNOWN = 'unknown_id';
 
-
 /// Registry
 
 export const DModelParameterRegistry = {
-
   /// Common parameters, normally available in all models ///
   // Note: we still use pre-v2 names for compatibility and ease of migration
 
@@ -41,7 +38,7 @@ export const DModelParameterRegistry = {
     nullable: {
       meaning: 'Explicitly avoid sending max_tokens to upstream API',
     } as const,
-    requiredFallback: FALLBACK_LLM_PARAM_RESPONSE_TOKENS,   // if required and not specified/user overridden, use this value
+    requiredFallback: FALLBACK_LLM_PARAM_RESPONSE_TOKENS, // if required and not specified/user overridden, use this value
   } as const,
 
   llmTemperature: {
@@ -91,7 +88,7 @@ export const DModelParameterRegistry = {
   llmVndGeminiShowThoughts: {
     label: 'Show Thoughts',
     type: 'boolean' as const,
-    description: 'Show Gemini\'s reasoning process',
+    description: "Show Gemini's reasoning process",
     initialValue: true,
   } as const,
 
@@ -112,7 +109,7 @@ export const DModelParameterRegistry = {
     label: 'Reasoning Effort',
     type: 'enum' as const,
     description: 'Constrains effort on reasoning for OpenAI reasoning models',
-    values: ['low', 'medium', 'high'] as const,
+    values: ['minimal', 'low', 'medium', 'high'] as const,
     requiredFallback: 'medium',
   } as const,
 
@@ -140,6 +137,15 @@ export const DModelParameterRegistry = {
     type: 'boolean' as const,
     description: 'Approximate location for search results',
     initialValue: false,
+  } as const,
+
+  // GPT-5: Verbosity for Responses API text output
+  llmVndOaiTextVerbosity: {
+    label: 'Verbosity',
+    type: 'enum' as const,
+    description: 'Controls output verbosity for GPT-5 Responses',
+    values: ['low', 'medium', 'high'] as const,
+    // no fallback: leave unspecified unless user selects
   } as const,
 
   // Perplexity-specific parameters
@@ -186,9 +192,7 @@ export const DModelParameterRegistry = {
     values: ['unfiltered', '1d', '1w', '1m', '6m', '1y'] as const,
     // requiredFallback: 'unfiltered',
   } as const,
-
 } as const;
-
 
 /// Types
 
@@ -208,38 +212,41 @@ export interface DModelParameterSpec<T extends DModelParameterId> {
 
 export type DModelParameterValues = {
   [K in DModelParameterId]?: DModelParameterValue<K>;
-}
+};
 
 export type DModelParameterId = keyof typeof DModelParameterRegistry;
 // type _ExtendedParameterId = keyof typeof _ExtendedParameterRegistry;
 
-type _EnumValues<T> = T extends { type: 'enum', values: readonly (infer U)[] } ? U : never;
+type _EnumValues<T> = T extends { type: 'enum'; values: readonly (infer U)[] } ? U : never;
 
-type DModelParameterValue<T extends DModelParameterId> =
-  typeof DModelParameterRegistry[T]['type'] extends 'integer'
-    ? typeof DModelParameterRegistry[T] extends { nullable: any }
+type DModelParameterValue<T extends DModelParameterId> = (typeof DModelParameterRegistry)[T]['type'] extends 'integer'
+  ? (typeof DModelParameterRegistry)[T] extends { nullable: any }
+    ? number | null
+    : number
+  : (typeof DModelParameterRegistry)[T]['type'] extends 'float'
+    ? (typeof DModelParameterRegistry)[T] extends { nullable: any }
       ? number | null
-      : number :
-    typeof DModelParameterRegistry[T]['type'] extends 'float'
-      ? typeof DModelParameterRegistry[T] extends { nullable: any }
-        ? number | null
-        : number :
-      typeof DModelParameterRegistry[T]['type'] extends 'string' ? string :
-        typeof DModelParameterRegistry[T]['type'] extends 'boolean' ? boolean :
-          typeof DModelParameterRegistry[T]['type'] extends 'enum'
-            ? _EnumValues<typeof DModelParameterRegistry[T]>
-            : never;
-
+      : number
+    : (typeof DModelParameterRegistry)[T]['type'] extends 'string'
+      ? string
+      : (typeof DModelParameterRegistry)[T]['type'] extends 'boolean'
+        ? boolean
+        : (typeof DModelParameterRegistry)[T]['type'] extends 'enum'
+          ? _EnumValues<(typeof DModelParameterRegistry)[T]>
+          : never;
 
 /// Utility Functions
 
-export function applyModelParameterInitialValues(destValues: DModelParameterValues, parameterSpecs: DModelParameterSpec<DModelParameterId>[], overwriteExisting: boolean): void {
+export function applyModelParameterInitialValues(
+  destValues: DModelParameterValues,
+  parameterSpecs: DModelParameterSpec<DModelParameterId>[],
+  overwriteExisting: boolean,
+): void {
   for (const param of parameterSpecs) {
     const paramId = param.paramId;
 
     // skip if already present
-    if (!overwriteExisting && paramId in destValues)
-      continue;
+    if (!overwriteExisting && paramId in destValues) continue;
 
     // 1. (if present) apply Spec.initialValue
     if (param.initialValue !== undefined) {
@@ -252,16 +259,16 @@ export function applyModelParameterInitialValues(destValues: DModelParameterValu
     if (registryDef) {
       if ('initialValue' in registryDef && registryDef.initialValue !== undefined)
         destValues[paramId] = registryDef.initialValue as DModelParameterValue<typeof paramId>;
-    } else
-      console.warn(`applyModelParameterInitialValues: unknown parameter id '${paramId}'`);
+    } else console.warn(`applyModelParameterInitialValues: unknown parameter id '${paramId}'`);
   }
 }
 
-
 const _requiredParamId: DModelParameterId[] = ['llmRef', 'llmResponseTokens', 'llmTemperature'] as const;
 
-export function getAllModelParameterValues(initialParameters: undefined | DModelParameterValues, userParameters?: DModelParameterValues): DModelParameterValues {
-
+export function getAllModelParameterValues(
+  initialParameters: undefined | DModelParameterValues,
+  userParameters?: DModelParameterValues,
+): DModelParameterValues {
   // fallback values
   const fallbackParameters: DModelParameterValues = {};
   for (const requiredParamId of _requiredParamId) {
@@ -277,14 +284,12 @@ export function getAllModelParameterValues(initialParameters: undefined | DModel
   };
 }
 
-
 export function getModelParameterValueOrThrow<T extends DModelParameterId>(
   paramId: T,
   initialValues: undefined | DModelParameterValues,
   userValues: undefined | DModelParameterValues,
   fallbackValue: undefined | DModelParameterValue<T>,
 ): DModelParameterValue<T> {
-
   // check user values first
   if (userValues && paramId in userValues) {
     const value = userValues[paramId];
@@ -302,8 +307,7 @@ export function getModelParameterValueOrThrow<T extends DModelParameterId>(
 
   // finally the global registry fallback
   const paramDef = DModelParameterRegistry[paramId];
-  if ('requiredFallback' in paramDef && paramDef.requiredFallback !== undefined)
-    return paramDef.requiredFallback as DModelParameterValue<T>;
+  if ('requiredFallback' in paramDef && paramDef.requiredFallback !== undefined) return paramDef.requiredFallback as DModelParameterValue<T>;
 
   // if we're here, we couldn't find a value
   // [DANGER] VERY DANGEROUS, but shall NEVER happen

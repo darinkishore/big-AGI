@@ -8,13 +8,11 @@ import { geminiAccessSchema } from '~/modules/llms/server/gemini/gemini.router';
 import { ollamaAccessSchema } from '~/modules/llms/server/ollama/ollama.router';
 import { openAIAccessSchema } from '~/modules/llms/server/openai/openai.router';
 
-
 //
 // Design notes:
 // - [Client -> AIX API calls] This encodes the structure sent to the AIX server API calls
 // - Parts: mirror the Typescript definitions from the frontend-side, on 'chat.fragments.ts'
 //
-
 
 // Export types
 export type AixParts_DocPart = z.infer<typeof AixWire_Parts.DocPart_schema>;
@@ -39,11 +37,9 @@ export type AixAPI_Context_ChatGenerate = z.infer<typeof AixWire_API.ContextChat
 export type AixAPI_Model = z.infer<typeof AixWire_API.Model_schema>;
 export type AixAPIChatGenerate_Request = z.infer<typeof AixWire_API_ChatContentGenerate.Request_schema>;
 
-
 /// Input Types to AIX
 
 export namespace OpenAPI_Schema {
-
   /**
    * The zod definition of an "OpenAPI 3.0.3" "Schema Object".
    * https://spec.openapis.org/oas/v3.0.3#schema-object
@@ -86,11 +82,9 @@ export namespace OpenAPI_Schema {
     // default: z.any().optional(),
     // additionalProperties: z.union([z.boolean(), jsonSchema]).optional(),
   });
-
 }
 
 export namespace AixWire_Parts {
-
   // User Input Parts
 
   export const TextPart_schema = z.object({
@@ -133,11 +127,7 @@ export namespace AixWire_Parts {
 
     // Doc Type, not to be confused the underlying data type
     // TODO: have more precise types here, probably all VND.AGI.* ?
-    vdt: z.enum([
-      'application/vnd.agi.code',
-      'application/vnd.agi.ocr',
-      'text/plain',
-    ]),
+    vdt: z.enum(['application/vnd.agi.code', 'application/vnd.agi.ocr', 'text/plain']),
 
     // identifier of the document, to be known to the model, as unique as possible, for the purpose of versioning
     ref: z.string(),
@@ -178,10 +168,7 @@ export namespace AixWire_Parts {
   export const ToolInvocationPart_schema = z.object({
     pt: z.literal('tool_invocation'),
     id: z.string(),
-    invocation: z.discriminatedUnion('type', [
-      _FunctionCallInvocation_schema,
-      _CodeExecutionInvocation_schema,
-    ]),
+    invocation: z.discriminatedUnion('type', [_FunctionCallInvocation_schema, _CodeExecutionInvocation_schema]),
   });
 
   // Tool Response
@@ -201,10 +188,7 @@ export namespace AixWire_Parts {
   export const ToolResponsePart_schema = z.object({
     pt: z.literal('tool_response'),
     id: z.string(),
-    response: z.discriminatedUnion('type', [
-      _FunctionCallResponse_schema,
-      _CodeExecutionResponse_schema,
-    ]),
+    response: z.discriminatedUnion('type', [_FunctionCallResponse_schema, _CodeExecutionResponse_schema]),
     error: z.string().or(z.boolean()).optional(),
     // _environment: z.enum(['upstream', 'server', 'client']).optional(),
   });
@@ -228,71 +212,68 @@ export namespace AixWire_Parts {
 
   export const MetaInReferenceToPart_schema = z.object({
     pt: z.literal('meta_in_reference_to'),
-    referTo: z.array(z.object({
-      mrt: z.literal('dmsg'),
-      mText: z.string(),
-      mRole: z.string(),
-    })),
+    referTo: z.array(
+      z.object({
+        mrt: z.literal('dmsg'),
+        mText: z.string(),
+        mRole: z.string(),
+      }),
+    ),
   });
-
 }
 
 export namespace AixWire_Content {
-
   /// System Message
 
   export const SystemInstruction_schema = z.object({
-    parts: z.array(z.discriminatedUnion('pt', [
-      AixWire_Parts.TextPart_schema,
-      AixWire_Parts.DocPart_schema, // Jan 10, 2025: added support for Docs in AIX system
-      AixWire_Parts.MetaCacheControl_schema,
-    ])),
+    parts: z.array(
+      z.discriminatedUnion('pt', [
+        AixWire_Parts.TextPart_schema,
+        AixWire_Parts.DocPart_schema, // Jan 10, 2025: added support for Docs in AIX system
+        AixWire_Parts.MetaCacheControl_schema,
+      ]),
+    ),
   });
 
   /// Chat Message
 
   export const UserMessage_schema = z.object({
     role: z.literal('user'),
-    parts: z.array(z.discriminatedUnion('pt', [
-      AixWire_Parts.TextPart_schema,
-      // AixWire_Parts.InlineAudioPart_schema,
-      AixWire_Parts.InlineImagePart_schema,
-      AixWire_Parts.DocPart_schema,
-      AixWire_Parts.MetaCacheControl_schema,
-      AixWire_Parts.MetaInReferenceToPart_schema,
-    ])),
+    parts: z.array(
+      z.discriminatedUnion('pt', [
+        AixWire_Parts.TextPart_schema,
+        // AixWire_Parts.InlineAudioPart_schema,
+        AixWire_Parts.InlineImagePart_schema,
+        AixWire_Parts.DocPart_schema,
+        AixWire_Parts.MetaCacheControl_schema,
+        AixWire_Parts.MetaInReferenceToPart_schema,
+      ]),
+    ),
   });
 
   export const ModelMessage_schema = z.object({
     role: z.literal('model'),
-    parts: z.array(z.discriminatedUnion('pt', [
-      AixWire_Parts.TextPart_schema,
-      AixWire_Parts.InlineAudioPart_schema,
-      AixWire_Parts.InlineImagePart_schema,
-      AixWire_Parts.ToolInvocationPart_schema,
-      AixWire_Parts.ModelAuxPart_schema,
-      AixWire_Parts.MetaCacheControl_schema,
-    ])),
+    parts: z.array(
+      z.discriminatedUnion('pt', [
+        AixWire_Parts.TextPart_schema,
+        AixWire_Parts.InlineAudioPart_schema,
+        AixWire_Parts.InlineImagePart_schema,
+        AixWire_Parts.ToolInvocationPart_schema,
+        AixWire_Parts.ModelAuxPart_schema,
+        AixWire_Parts.MetaCacheControl_schema,
+      ]),
+    ),
   });
 
   export const ToolMessage_schema = z.object({
     role: z.literal('tool'),
-    parts: z.array(z.discriminatedUnion('pt', [
-      AixWire_Parts.ToolResponsePart_schema,
-      AixWire_Parts.MetaCacheControl_schema,
-    ])),
+    parts: z.array(z.discriminatedUnion('pt', [AixWire_Parts.ToolResponsePart_schema, AixWire_Parts.MetaCacheControl_schema])),
   });
 
-  export const ChatMessage_schema = z.discriminatedUnion('role', [
-    UserMessage_schema,
-    ModelMessage_schema,
-    ToolMessage_schema,
-  ]);
-
+  export const ChatMessage_schema = z.discriminatedUnion('role', [UserMessage_schema, ModelMessage_schema, ToolMessage_schema]);
 }
 
 export namespace AixWire_Tooling {
-
   /// Function Call Tool Definition
 
   const _FunctionCall_schema = z.object({
@@ -313,11 +294,13 @@ export namespace AixWire_Tooling {
      *  - Optional. If not provided, it means the Function Tool does not require any input and will be invoked without any arguments.
      *  (OpenAI + Google: parameters, Anthropic: input_schema)
      */
-    input_schema: z.object({
-      // type: z.literal('object'), // Note: every protocol adapter adds this in the structure, here's we're just opting to not add it
-      properties: z.record(z.string(), OpenAPI_Schema.Object_schema),
-      required: z.array(z.string()).optional(),
-    }).optional(),
+    input_schema: z
+      .object({
+        // type: z.literal('object'), // Note: every protocol adapter adds this in the structure, here's we're just opting to not add it
+        properties: z.record(z.string(), OpenAPI_Schema.Object_schema),
+        required: z.array(z.string()).optional(),
+      })
+      .optional(),
   });
 
   const _FunctionCallTool_schema = z.object({
@@ -361,10 +344,7 @@ export namespace AixWire_Tooling {
    *  { type: 'code_execution', provider: 'gemini' },
    * ]
    * */
-  export const Tool_schema = z.discriminatedUnion('type', [
-    _FunctionCallTool_schema,
-    _CodeExecutionTool_schema,
-  ]);
+  export const Tool_schema = z.discriminatedUnion('type', [_FunctionCallTool_schema, _CodeExecutionTool_schema]);
 
   /// Tools Policy
 
@@ -379,28 +359,32 @@ export namespace AixWire_Tooling {
     z.object({ type: z.literal('auto') }),
     z.object({ type: z.literal('any') /*, parallel: z.boolean()*/ }),
     z.object({ type: z.literal('function_call'), function_call: z.object({ name: z.string() }) }),
+    // GPT-5: Allowed tools list
+    z.object({
+      type: z.literal('allowed_tools'),
+      mode: z.enum(['auto', 'required']),
+      tools: z.array(
+        z.discriminatedUnion('type', [
+          z.object({ type: z.literal('function'), name: z.string() }),
+          z.object({ type: z.literal('mcp'), server_label: z.string() }),
+          z.object({ type: z.literal('image_generation') }),
+        ]),
+      ),
+    }),
   ]);
-
 }
 
 export namespace AixWire_API {
-
   /// Access
 
-  export const Access_schema = z.discriminatedUnion('dialect', [
-    anthropicAccessSchema,
-    geminiAccessSchema,
-    ollamaAccessSchema,
-    openAIAccessSchema,
-  ]);
+  export const Access_schema = z.discriminatedUnion('dialect', [anthropicAccessSchema, geminiAccessSchema, ollamaAccessSchema, openAIAccessSchema]);
 
   /// Model
 
   export const Model_schema = z.object({
     id: z.string(),
     acceptsOutputs: z.array(z.enum(['text', 'image', 'audio'])),
-    temperature: z.number().min(0).max(2).optional()
-      .nullable(), // [Deepseek, 2025-01-20] temperature unsupported, so we use 'null' to omit it from the request
+    temperature: z.number().min(0).max(2).optional().nullable(), // [Deepseek, 2025-01-20] temperature unsupported, so we use 'null' to omit it from the request
     maxTokens: z.number().min(1).optional(),
     topP: z.number().min(0).max(1).optional(),
     forceNoStream: z.boolean().optional(),
@@ -408,9 +392,11 @@ export namespace AixWire_API {
     vndGeminiShowThoughts: z.boolean().optional(),
     vndGeminiThinkingBudget: z.number().optional(),
     vndOaiResponsesAPI: z.boolean().optional(),
-    vndOaiReasoningEffort: z.enum(['low', 'medium', 'high']).optional(),
+    vndOaiReasoningEffort: z.enum(['minimal', 'low', 'medium', 'high']).optional(),
     vndOaiRestoreMarkdown: z.boolean().optional(),
     vndOaiWebSearchContext: z.enum(['low', 'medium', 'high']).optional(),
+    // GPT-5: verbosity for text outputs
+    vndOaiTextVerbosity: z.enum(['low', 'medium', 'high']).optional(),
     vndPerplexityDateFilter: z.enum(['unfiltered', '1m', '3m', '6m', '1y']).optional(),
     vndPerplexitySearchMode: z.enum(['default', 'academic']).optional(),
     vndXaiSearchMode: z.enum(['auto', 'on', 'off']).optional(),
@@ -420,12 +406,14 @@ export namespace AixWire_API {
      * [OpenAI, 2025-03-11] This is the generic version of the `web_search_options.user_location` field
      * This AIX field mimics on purpose: https://platform.openai.com/docs/api-reference/chat/create
      */
-    userGeolocation: z.object({
-      city: z.string().optional(),      // free text input for the city of the user, e.g. San Francisco.
-      country: z.string().optional(),   // two-letter ISO country code of the user, e.g. US
-      region: z.string().optional(),    // free text input for the reg. of the user the user, e.g. California
-      timezone: z.string().optional(),  // IANA timezone of the user, e.g. America/Los_Angeles
-    }).optional(),
+    userGeolocation: z
+      .object({
+        city: z.string().optional(), // free text input for the city of the user, e.g. San Francisco.
+        country: z.string().optional(), // two-letter ISO country code of the user, e.g. US
+        region: z.string().optional(), // free text input for the reg. of the user the user, e.g. California
+        timezone: z.string().optional(), // IANA timezone of the user, e.g. America/Los_Angeles
+      })
+      .optional(),
   });
 
   /// Context
@@ -433,11 +421,10 @@ export namespace AixWire_API {
   export const ContextChatGenerate_schema = z.object({
     method: z.literal('chat-generate'),
     name: z.enum([
-
       // non-streaming AI operations
       'chat-ai-summarize',
       'chat-ai-title',
-      'chat-attachment-prompts',  // - id of the first fragment
+      'chat-attachment-prompts', // - id of the first fragment
       'chat-followup-diagram',
       'chat-followup-htmlui',
       'chat-react-turn',
@@ -445,17 +432,16 @@ export namespace AixWire_API {
       'fixup-code',
 
       // streaming AI operations
-      'ai-diagram',               // making a diagram - messageId
-      'ai-flattener',             // flattening a thread - messageId of the first message
-      'beam-gather',              // fusing beam rays - fusionId
-      'beam-scatter',             // scattering beam rays - rayId
-      'call',                     // having a phone conversation - messageId of the first message
-      'conversation',             // chatting with a persona - conversationId
-      'persona-extract',          // extracting a persona from texts - chainId
+      'ai-diagram', // making a diagram - messageId
+      'ai-flattener', // flattening a thread - messageId of the first message
+      'beam-gather', // fusing beam rays - fusionId
+      'beam-scatter', // scattering beam rays - rayId
+      'call', // having a phone conversation - messageId of the first message
+      'conversation', // chatting with a persona - conversationId
+      'persona-extract', // extracting a persona from texts - chainId
 
       // temporary (nothing is more permanent than a temporary fix that works well)
       '_DEV_',
-
     ]),
     ref: z.string(),
   });
@@ -474,11 +460,9 @@ export namespace AixWire_API {
     // retry: z.number().optional(),
     // retryDelay: z.number().optional(),
   });
-
 }
 
 export namespace AixWire_API_ChatContentGenerate {
-
   /// Request
 
   export const Request_schema = z.object({
@@ -503,9 +487,7 @@ export namespace AixWire_API_ChatContentGenerate {
   //   issueId: z.enum(['dispatch-prepare', 'dispatch-fetch', 'dispatch-read', 'dispatch-parse']),
   //   issueText: z.string(),
   // });
-
 }
-
 
 ///  Output Types from AIX
 
@@ -518,50 +500,46 @@ export namespace AixWire_API_ChatContentGenerate {
  * and tRPC decoding will be broken (very important!)
  */
 export namespace AixWire_Particles {
-
   /** Unified particle representation for outputs of chatGenerate */
-  export type ChatGenerateOp =
-    | ChatControlOp
-    | TextParticleOp
-    | PartParticleOp;
-
+  export type ChatGenerateOp = ChatControlOp | TextParticleOp | PartParticleOp;
 
   // ChatControl
 
   type ChatControlOp =
-  // | { cg: 'start' } // not really used for now
-    | { cg: 'end', reason: CGEndReason, tokenStopReason: GCTokenStopReason }
-    | { cg: 'issue', issueId: CGIssueId, issueText: string }
-    | { cg: 'set-metrics', metrics: CGSelectMetrics }
-    | { cg: 'set-model', name: string }
-    | { cg: '_debugDispatchRequest', security: 'dev-env', dispatchRequest: { url: string, headers: string, body: string } } // may generalize this in the future
-    | { cg: '_debugProfiler', measurements: Record<string, number | string>[] };
+    // | { cg: 'start' } // not really used for now
+    | { cg: 'end'; reason: CGEndReason; tokenStopReason: GCTokenStopReason }
+    | { cg: 'issue'; issueId: CGIssueId; issueText: string }
+    | { cg: 'set-metrics'; metrics: CGSelectMetrics }
+    | { cg: 'set-model'; name: string }
+    | { cg: '_debugDispatchRequest'; security: 'dev-env'; dispatchRequest: { url: string; headers: string; body: string } } // may generalize this in the future
+    | { cg: '_debugProfiler'; measurements: Record<string, number | string>[] };
 
-  export type CGEndReason =     // the reason for the end of the chat generation
-    | 'abort-client'            // user aborted before the end of stream
-    | 'done-dialect'            // OpenAI signals the '[DONE]' event, or Anthropic sensds the 'message_stop' event
-    | 'done-dispatch-aborted'   // this shall never see the light of day, as it was a reaction to the intake being aborted first
-    | 'done-dispatch-closed'    // dispatch connection closed
-    | 'issue-dialect'           // [1] ended because a dispatch encountered an issue, such as out-of-tokens, recitation, etc.
-    | 'issue-rpc';              // [2] ended because of an issue
+  export type CGEndReason = // the reason for the end of the chat generation
+
+      | 'abort-client' // user aborted before the end of stream
+      | 'done-dialect' // OpenAI signals the '[DONE]' event, or Anthropic sensds the 'message_stop' event
+      | 'done-dispatch-aborted' // this shall never see the light of day, as it was a reaction to the intake being aborted first
+      | 'done-dispatch-closed' // dispatch connection closed
+      | 'issue-dialect' // [1] ended because a dispatch encountered an issue, such as out-of-tokens, recitation, etc.
+      | 'issue-rpc'; // [2] ended because of an issue
 
   export type CGIssueId =
-    | 'dialect-issue'           // [1] when end reason = 'issue-dialect'
-    | 'dispatch-prepare'        // [2] when end reason = 'issue-rpc', 4 phases of GC dispatch
-    | 'dispatch-fetch'          // [2] "
-    | 'dispatch-read'           // [2] "
-    | 'dispatch-parse'          // [2] "
-    | 'client-read';            // the aix client encountered an unexpected error (e.g. tRPC)
+    | 'dialect-issue' // [1] when end reason = 'issue-dialect'
+    | 'dispatch-prepare' // [2] when end reason = 'issue-rpc', 4 phases of GC dispatch
+    | 'dispatch-fetch' // [2] "
+    | 'dispatch-read' // [2] "
+    | 'dispatch-parse' // [2] "
+    | 'client-read'; // the aix client encountered an unexpected error (e.g. tRPC)
 
   export type GCTokenStopReason =
-    | 'ok'                      // clean, including reaching 'stop sequences'
-    | 'ok-tool_invocations'     // clean & tool invocations
+    | 'ok' // clean, including reaching 'stop sequences'
+    | 'ok-tool_invocations' // clean & tool invocations
     // premature:
-    | 'cg-issue'                // [1][2] chat-generation issue (see CGIssueId)
-    | 'client-abort-signal'     // the client aborted - likely a user/auto initiation
-    | 'filter-content'          // content filter (e.g. profanity)
-    | 'filter-recitation'       // recitation filter (e.g. recitation)
-    | 'out-of-tokens';          // got out of tokens
+    | 'cg-issue' // [1][2] chat-generation issue (see CGIssueId)
+    | 'client-abort-signal' // the client aborted - likely a user/auto initiation
+    | 'filter-content' // content filter (e.g. profanity)
+    | 'filter-recitation' // recitation filter (e.g. recitation)
+    | 'out-of-tokens'; // got out of tokens
 
   /**
    * NOTE: break compatbility with this D-stored-type only when we'll
@@ -572,42 +550,47 @@ export namespace AixWire_Particles {
    */
   export type CGSelectMetrics = {
     // T = milliseconds
-    TIn?: number,         // Portion of Input tokens which is new (not cached)
-    TCacheRead?: number,
-    TCacheWrite?: number,
-    TOut?: number,
-    TOutR?: number,       // Portion of TOut that was used for reasoning (e.g. not for output)
+    TIn?: number; // Portion of Input tokens which is new (not cached)
+    TCacheRead?: number;
+    TCacheWrite?: number;
+    TOut?: number;
+    TOutR?: number; // Portion of TOut that was used for reasoning (e.g. not for output)
     // TOutA?: number,    // Portion of TOut that was used for Audio
 
     // dt = milliseconds
-    dtStart?: number,
-    dtInner?: number,
-    dtAll?: number,
+    dtStart?: number;
+    dtInner?: number;
+    dtAll?: number;
 
     // v = Tokens/s
-    vTOutInner?: number,  // TOut / dtInner
+    vTOutInner?: number; // TOut / dtInner
   };
 
   // TextParticle / PartParticle - keep in line with the DMessage*Part counterparts
 
-  export type TextParticleOp =
-    | { t: string }; // special: incremental text, but with a more optimized/succinct representation compared to { p: 't_', i_t: string }
+  export type TextParticleOp = { t: string }; // special: incremental text, but with a more optimized/succinct representation compared to { p: 't_', i_t: string }
 
   export type PartParticleOp =
     | { p: '❤' } // heart beat
-    | { p: 'tr_', _t: string, weak?: 'tag' } // reasoning text, incremental; could be a 'weak' detection, e.g. heuristic from '<think>' rather than API-provided
-    | { p: 'trs', signature: string } // reasoning signature
-    | { p: 'trr_', _data: string } // reasoning raw (or redacted) data
+    | { p: 'tr_'; _t: string; weak?: 'tag' } // reasoning text, incremental; could be a 'weak' detection, e.g. heuristic from '<think>' rather than API-provided
+    | { p: 'trs'; signature: string } // reasoning signature
+    | { p: 'trr_'; _data: string } // reasoning raw (or redacted) data
     // | { p: 'ii', mimeType: string, i_b64?: string /* never undefined */ }
     // | { p: '_ii', i_b64: string }
     // | { p: 'di', type: string, ref: string, l1Title: string, i_text?: string /* never undefined */ }
     // | { p: '_di', i_text: string }
-    | { p: 'fci', id: string, name: string, i_args?: string /* never undefined */ }
-    | { p: '_fci', _args: string }
-    | { p: 'cei', id: string, language: string, code: string, author: 'gemini_auto_inline' }
-    | { p: 'cer', id: string, error: DMessageToolResponsePart['error'], result: string, executor: 'gemini_auto_inline', environment: DMessageToolResponsePart['environment'] }
-    | { p: 'ia', mimeType: string, a_b64: string, label?: string, generator?: string, durationMs?: number } // inline audio, complete
-    | { p: 'ii', mimeType: string, i_b64: string, label?: string, generator?: string, prompt?: string } // inline image, complete
-    | { p: 'urlc', title: string, url: string, num?: number, from?: number, to?: number, text?: string, pubTs?: number }; // url citation - pubTs: publication timestamp
-
+    | { p: 'fci'; id: string; name: string; i_args?: string /* never undefined */ }
+    | { p: '_fci'; _args: string }
+    | { p: 'cei'; id: string; language: string; code: string; author: 'gemini_auto_inline' }
+    | {
+        p: 'cer';
+        id: string;
+        error: DMessageToolResponsePart['error'];
+        result: string;
+        executor: 'gemini_auto_inline';
+        environment: DMessageToolResponsePart['environment'];
+      }
+    | { p: 'ia'; mimeType: string; a_b64: string; label?: string; generator?: string; durationMs?: number } // inline audio, complete
+    | { p: 'ii'; mimeType: string; i_b64: string; label?: string; generator?: string; prompt?: string } // inline image, complete
+    | { p: 'urlc'; title: string; url: string; num?: number; from?: number; to?: number; text?: string; pubTs?: number }; // url citation - pubTs: publication timestamp
 }

@@ -14,6 +14,7 @@ import { BrowseSettings } from '~/modules/browse/BrowseSettings';
 import { DallESettings } from '~/modules/t2i/dalle/DallESettings';
 import { ElevenlabsSettings } from '~/modules/elevenlabs/ElevenlabsSettings';
 import { GoogleSearchSettings } from '~/modules/google/GoogleSearchSettings';
+import { MCPSettings } from '~/modules/mcp/MCPSettings';
 import { T2ISettings } from '~/modules/t2i/T2ISettings';
 
 import type { PreferencesTabId } from '~/common/layout/optima/store-layout-optima';
@@ -291,7 +292,10 @@ export function SettingsModal(props: {
 
         <TabPanel value='tools' variant='outlined' sx={_styles.tabPanel}>
           <Topics>
-            <Topic icon={<LanguageRoundedIcon />} title='Browse Web Pages'>
+            <Topic icon={<AddIcon />} title='Model Context Protocol (MCP)'>
+              <MCPSettings />
+            </Topic>
+            <Topic icon={<LanguageRoundedIcon />} title='Browse Web Pages' startCollapsed>
               <BrowseSettings />
             </Topic>
             <Topic icon={<SearchIcon />} title='Web Search · Google API' startCollapsed>
